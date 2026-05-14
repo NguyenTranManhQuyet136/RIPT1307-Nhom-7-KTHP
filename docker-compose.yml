@@ -1,0 +1,15 @@
+services:
+  db:
+    image: postgres:15
+    container_name: eduforum_db
+    environment:
+      POSTGRES_DB: eduforum
+      POSTGRES_USER: choleo
+      POSTGRES_PASSWORD: choleo123
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
