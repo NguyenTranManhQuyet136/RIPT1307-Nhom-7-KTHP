@@ -57,6 +57,8 @@ interface Post {
   author_name: string;
   tags: TagType[];
   view_count: number;
+  score: number;
+  user_vote: number;
   is_closed: boolean;
   created_at: string;
   updated_at: string;
@@ -71,6 +73,8 @@ interface CommentReply {
   content: string;
   parent: number;
   is_accepted: boolean;
+  score: number;
+  user_vote: number;
   replies: CommentReply[];
   created_at: string;
 }
@@ -84,6 +88,8 @@ interface CommentType {
   content: string;
   parent: number | null;
   is_accepted: boolean;
+  score: number;
+  user_vote: number;
   replies: CommentReply[];
   created_at: string;
 }
@@ -98,7 +104,7 @@ const getRoleBadge = (role: string) => {
   return null;
 };
 
-const ReplyItem: React.FC<{ reply: CommentReply }> = ({ reply }) => (
+const ReplyItem: React.FC<{ reply: CommentReply; onVote: (id: number, val: number) => void }> = ({ reply, onVote }) => (
   <div style={{
     marginLeft: 40,
     padding: '12px 16px',
@@ -107,18 +113,31 @@ const ReplyItem: React.FC<{ reply: CommentReply }> = ({ reply }) => (
     marginBottom: 8,
     borderRadius: '0 4px 4px 0'
   }}>
-    <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
-      <Avatar size="small" style={{ backgroundColor: '#6a737c' }} icon={<UserOutlined />} />
-      <Text strong style={{ color: '#0074cc', marginLeft: 8, fontSize: 13 }}>{reply.author_name}</Text>
-      {getRoleBadge(reply.author_role)}
-      <Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>
-        <ClockCircleOutlined style={{ marginRight: 4 }} />
-        {moment(reply.created_at).fromNow()}
-      </Text>
+    <div style={{ display: 'flex', gap: 12 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 24 }}>
+        <CaretUpOutlined 
+          style={{ cursor: 'pointer', color: reply.user_vote === 1 ? '#f48024' : '#babfc4', fontSize: 18 }} 
+          onClick={() => onVote(reply.id, 1)}
+        />
+        <Text strong style={{ fontSize: 13, color: '#6a737c' }}>{reply.score}</Text>
+        <CaretDownOutlined 
+          style={{ cursor: 'pointer', color: reply.user_vote === -1 ? '#39739d' : '#babfc4', fontSize: 18 }} 
+          onClick={() => onVote(reply.id, -1)}
+        />
+      </div>
+      <div style={{ flex: 1 }}>
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 4 }}>
+          <Text strong style={{ color: '#0074cc', fontSize: 13 }}>{reply.author_name}</Text>
+          {getRoleBadge(reply.author_role)}
+          <Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>
+            {moment(reply.created_at).fromNow()}
+          </Text>
+        </div>
+        <Paragraph style={{ margin: 0, color: '#3c4146', fontSize: 14, whiteSpace: 'pre-wrap' }}>
+          {reply.content}
+        </Paragraph>
+      </div>
     </div>
-    <Paragraph style={{ margin: 0, color: '#3c4146', fontSize: 14, whiteSpace: 'pre-wrap' }}>
-      {reply.content}
-    </Paragraph>
   </div>
 );
 
@@ -133,6 +152,7 @@ interface CommentItemProps {
   onSubmitReply: (parentId: number) => void;
   onCancelReply: () => void;
   onAccept: (id: number) => void;
+  onVote: (id: number, val: number) => void;
 }
 
 const CommentItem: React.FC<CommentItemProps> = ({
@@ -145,7 +165,8 @@ const CommentItem: React.FC<CommentItemProps> = ({
   onReplyContentChange,
   onSubmitReply,
   onCancelReply,
-  onAccept
+  onAccept,
+  onVote
 }) => (
   <div style={{ borderBottom: '1px solid #e3e6e8', padding: '20px 0' }}>
     <div style={{ display: 'flex', gap: 16 }}>
@@ -154,12 +175,22 @@ const CommentItem: React.FC<CommentItemProps> = ({
         flexDirection: 'column',
         alignItems: 'center',
         minWidth: 48,
-        gap: 8,
+        gap: 4,
         paddingTop: 4
       }}>
-        <Button type="text" icon={<CaretUpOutlined style={{ fontSize: 24, color: '#babfc4' }} />} style={{ padding: 0, height: 'auto' }} />
-        <Text strong style={{ fontSize: 18, color: '#6a737c' }}>0</Text>
-        <Button type="text" icon={<CaretDownOutlined style={{ fontSize: 24, color: '#babfc4' }} />} style={{ padding: 0, height: 'auto' }} />
+        <Button 
+          type="text" 
+          icon={<CaretUpOutlined style={{ fontSize: 32, color: comment.user_vote === 1 ? '#f48024' : '#babfc4' }} />} 
+          onClick={() => onVote(comment.id, 1)}
+          style={{ padding: 0, height: 'auto' }} 
+        />
+        <Text strong style={{ fontSize: 22, color: '#6a737c' }}>{comment.score}</Text>
+        <Button 
+          type="text" 
+          icon={<CaretDownOutlined style={{ fontSize: 32, color: comment.user_vote === -1 ? '#39739d' : '#babfc4' }} />} 
+          onClick={() => onVote(comment.id, -1)}
+          style={{ padding: 0, height: 'auto' }} 
+        />
         {canAccept ? (
           <Tooltip title={comment.is_accepted ? "Bỏ chấp nhận câu trả lời" : "Chấp nhận câu trả lời"}>
             <Button
@@ -169,12 +200,12 @@ const CommentItem: React.FC<CommentItemProps> = ({
                 <CheckCircleOutlined style={{ fontSize: 28, color: '#babfc4' }} />
               }
               onClick={() => onAccept(comment.id)}
-              style={{ padding: 0, height: 'auto', marginTop: 4 }}
+              style={{ padding: 0, height: 'auto', marginTop: 8 }}
             />
           </Tooltip>
         ) : comment.is_accepted ? (
           <Tooltip title="Câu trả lời đã được chấp nhận">
-            <CheckCircleFilled style={{ fontSize: 28, color: '#5eba7d', marginTop: 4 }} />
+            <CheckCircleFilled style={{ fontSize: 28, color: '#5eba7d', marginTop: 8 }} />
           </Tooltip>
         ) : null}
       </div>
@@ -232,7 +263,9 @@ const CommentItem: React.FC<CommentItemProps> = ({
 
         {comment.replies && comment.replies.length > 0 && (
           <div style={{ marginTop: 12 }}>
-            {comment.replies.map(reply => <ReplyItem key={reply.id} reply={reply} />)}
+            {comment.replies.map(reply => (
+              <ReplyItem key={reply.id} reply={reply} onVote={onVote} />
+            ))}
           </div>
         )}
       </div>
@@ -255,7 +288,11 @@ const PostDetailPage: React.FC = () => {
 
   const fetchPost = async () => {
     try {
-      const res = await fetch(`${BASE_URL}/api/posts/${id}/`);
+      const token = localStorage.getItem('access_token');
+      const headers: any = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const res = await fetch(`${BASE_URL}/api/posts/${id}/`, { headers });
       if (res.ok) {
         const data = await res.json();
         setPost(data);
@@ -270,7 +307,11 @@ const PostDetailPage: React.FC = () => {
 
   const fetchComments = async () => {
     try {
-      const res = await fetch(`${BASE_URL}/api/comments/?post=${id}`);
+      const token = localStorage.getItem('access_token');
+      const headers: any = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const res = await fetch(`${BASE_URL}/api/comments/?post=${id}`, { headers });
       if (res.ok) {
         const data = await res.json();
         setComments(data);
@@ -303,6 +344,53 @@ const PostDetailPage: React.FC = () => {
     { type: 'divider' },
     { key: 'logout', icon: <LogoutOutlined />, label: 'Đăng xuất', onClick: handleLogout },
   ];
+
+  const handlePostVote = async (value: number) => {
+    const token = localStorage.getItem('access_token');
+    if (!token) {
+      message.warning('Vui lòng đăng nhập để vote');
+      return;
+    }
+    try {
+      const res = await fetch(`${BASE_URL}/api/posts/${id}/vote/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ value })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPost(prev => prev ? { ...prev, score: data.score, user_vote: data.user_vote } : null);
+      }
+    } catch (error) {
+      message.error('Lỗi khi vote bài viết');
+    }
+  };
+
+  const handleCommentVote = async (commentId: number, value: number) => {
+    const token = localStorage.getItem('access_token');
+    if (!token) {
+      message.warning('Vui lòng đăng nhập để vote');
+      return;
+    }
+    try {
+      const res = await fetch(`${BASE_URL}/api/comments/${commentId}/vote/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ value })
+      });
+      if (res.ok) {
+        await fetchComments(); // Reload để cập nhật điểm và trạng thái vote cho cả reply
+      }
+    } catch (error) {
+      message.error('Lỗi khi vote bình luận');
+    }
+  };
 
   const handleSubmitAnswer = async () => {
     const token = localStorage.getItem('access_token');
@@ -386,11 +474,11 @@ const PostDetailPage: React.FC = () => {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
-        message.success('Đã chấp nhận câu trả lời!');
+        message.success('Đã cập nhật trạng thái chấp nhận!');
         await fetchComments();
       } else {
         const err = await res.json();
-        message.error(err.detail || 'Không thể chấp nhận');
+        message.error(err.detail || 'Không thể cập nhật');
       }
     } catch (error) {
       message.error('Lỗi kết nối server');
@@ -509,10 +597,20 @@ const PostDetailPage: React.FC = () => {
             </div>
 
             <div style={{ display: 'flex', gap: 16, marginBottom: 32 }}>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 48, gap: 8, paddingTop: 4 }}>
-                <Button type="text" icon={<CaretUpOutlined style={{ fontSize: 28, color: '#babfc4' }} />} style={{ padding: 0, height: 'auto' }} />
-                <Text strong style={{ fontSize: 20, color: '#6a737c' }}>0</Text>
-                <Button type="text" icon={<CaretDownOutlined style={{ fontSize: 28, color: '#babfc4' }} />} style={{ padding: 0, height: 'auto' }} />
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 48, gap: 4, paddingTop: 4 }}>
+                <Button 
+                  type="text" 
+                  icon={<CaretUpOutlined style={{ fontSize: 32, color: post.user_vote === 1 ? '#f48024' : '#babfc4' }} />} 
+                  onClick={() => handlePostVote(1)}
+                  style={{ padding: 0, height: 'auto' }} 
+                />
+                <Text strong style={{ fontSize: 22, color: '#6a737c' }}>{post.score}</Text>
+                <Button 
+                  type="text" 
+                  icon={<CaretDownOutlined style={{ fontSize: 32, color: post.user_vote === -1 ? '#39739d' : '#babfc4' }} />} 
+                  onClick={() => handlePostVote(-1)}
+                  style={{ padding: 0, height: 'auto' }} 
+                />
               </div>
               <div style={{ flex: 1 }}>
                 <Paragraph style={{ fontSize: 15, lineHeight: 1.8, color: '#232629', marginBottom: 16, whiteSpace: 'pre-wrap' }}>
@@ -556,6 +654,7 @@ const PostDetailPage: React.FC = () => {
                   onSubmitReply={handleSubmitReply}
                   onCancelReply={handleCancelReply}
                   onAccept={handleAcceptAnswer}
+                  onVote={handleCommentVote}
                 />
               ))
             ) : (
