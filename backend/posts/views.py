@@ -25,9 +25,11 @@ class PostViewSet(viewsets.ModelViewSet):
     
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
-        # Tăng lượt xem lên 1
-        instance.view_count += 1
-        instance.save(update_fields=['view_count'])
+        
+        # Chỉ tăng lượt xem nếu người xem KHÔNG PHẢI là tác giả
+        if request.user != instance.author:
+            instance.view_count += 1
+            instance.save(update_fields=['view_count'])
         
         serializer = self.get_serializer(instance)
         return Response(serializer.data)

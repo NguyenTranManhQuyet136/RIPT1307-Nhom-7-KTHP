@@ -173,7 +173,7 @@ const ForumPage: React.FC = () => {
             <Text strong style={{ color: '#5eba7d' }}>0</Text> <Text size="small" style={{ color: '#5eba7d' }}>answers</Text>
           </div>
           <div style={{ fontSize: 12 }}>
-            <EyeOutlined /> {post.view_count} views
+            <EyeOutlined /> {post.view_count} lượt xem
           </div>
         </Col>
         <Col span={20}>
