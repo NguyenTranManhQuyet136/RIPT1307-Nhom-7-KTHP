@@ -640,43 +640,47 @@ const PostDetailPage: React.FC = () => {
               </Title>
             </div>
 
-            {comments.length > 0 ? (
-              comments.map(comment => (
-                <CommentItem
-                  key={comment.id}
-                  comment={comment}
-                  canAccept={!!canAccept}
-                  replyingTo={replyingTo}
-                  replyContent={replyContent}
-                  submitting={submitting}
-                  onToggleReply={handleToggleReply}
-                  onReplyContentChange={setReplyContent}
-                  onSubmitReply={handleSubmitReply}
-                  onCancelReply={handleCancelReply}
-                  onAccept={handleAcceptAnswer}
-                  onVote={handleCommentVote}
-                />
-              ))
-            ) : (
-              <div style={{ padding: '40px 0', textAlign: 'center' }}>
-                <Text type="secondary" style={{ fontSize: 15 }}>Chưa có câu trả lời nào. Hãy là người đầu tiên trả lời!</Text>
-              </div>
-            )}
+            <div style={{ marginLeft: 48 }}>
+              {comments.length > 0 ? (
+                comments.map(comment => (
+                  <CommentItem
+                    key={comment.id}
+                    comment={comment}
+                    canAccept={!!canAccept}
+                    replyingTo={replyingTo}
+                    replyContent={replyContent}
+                    submitting={submitting}
+                    onToggleReply={handleToggleReply}
+                    onReplyContentChange={setReplyContent}
+                    onSubmitReply={handleSubmitReply}
+                    onCancelReply={handleCancelReply}
+                    onAccept={handleAcceptAnswer}
+                    onVote={handleCommentVote}
+                  />
+                ))
+              ) : (
+                <div style={{ padding: '40px 0', textAlign: 'center' }}>
+                  <Text type="secondary" style={{ fontSize: 15 }}>Chưa có câu trả lời nào. Hãy là người đầu tiên trả lời!</Text>
+                </div>
+              )}
+            </div>
 
             <div style={{ marginTop: 32, paddingBottom: 48 }}>
               <Title level={3} style={{ fontWeight: 400, color: '#3b4045', marginBottom: 16 }}>Câu trả lời của bạn</Title>
               {user ? (
                 <>
                   <TextArea
-                    rows={8}
+                    rows={5}
                     value={answerContent}
                     onChange={(e) => setAnswerContent(e.target.value)}
                     placeholder="Viết câu trả lời chi tiết, rõ ràng để giúp người hỏi giải quyết vấn đề..."
                     style={{ marginBottom: 12, border: '1px solid #babfc4', borderRadius: 4, fontSize: 14 }}
                   />
-                  <Button type="primary" size="large" loading={submitting} onClick={handleSubmitAnswer} icon={<CheckOutlined />}>
-                    Đăng câu trả lời
-                  </Button>
+                  <div style={{ textAlign: 'right' }}>
+                    <Button type="primary" size="large" loading={submitting} onClick={handleSubmitAnswer} icon={<CheckOutlined />}>
+                      Đăng câu trả lời
+                    </Button>
+                  </div>
                 </>
               ) : (
                 <div style={{ padding: 24, backgroundColor: '#fdf7e2', border: '1px solid #f1e5bc', borderRadius: 4, textAlign: 'center' }}>
