@@ -1,8 +1,15 @@
-import { Link, Outlet } from 'umi';
+import { Link, Outlet, useLocation } from 'umi';
 import React from 'react';
 import styles from './index.less';
 
 export default function Layout() {
+  const location = useLocation();
+  const isSpecialPage = location.pathname === '/auth' || location.pathname === '/forum' || location.pathname.startsWith('/forum/');
+
+  if (isSpecialPage) {
+    return <Outlet />;
+  }
+
   return (
     <div className={styles.navs}>
       <ul>
@@ -16,7 +23,9 @@ export default function Layout() {
           <Link to="/auth">Tài khoản</Link>
         </li>
       </ul>
-      <Outlet />
+      <div style={{ padding: '20px' }}>
+        <Outlet />
+      </div>
     </div>
   );
 }
