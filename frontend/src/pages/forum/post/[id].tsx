@@ -7,7 +7,6 @@ import {
   Space,
   Typography,
   Avatar,
-  Divider,
   message,
   ConfigProvider,
   theme,
@@ -88,6 +87,149 @@ interface CommentType {
   replies: CommentReply[];
   created_at: string;
 }
+
+const getRoleBadge = (role: string) => {
+  if (role === 'LECTURER') {
+    return <Tag color="blue" style={{ fontSize: 11, marginLeft: 6, borderRadius: 3 }}>Giảng viên</Tag>;
+  }
+  if (role === 'ADMIN') {
+    return <Tag color="red" style={{ fontSize: 11, marginLeft: 6, borderRadius: 3 }}>Admin</Tag>;
+  }
+  return null;
+};
+
+const ReplyItem: React.FC<{ reply: CommentReply }> = ({ reply }) => (
+  <div style={{
+    marginLeft: 40,
+    padding: '12px 16px',
+    backgroundColor: '#f8f9f9',
+    borderLeft: '3px solid #e3e6e8',
+    marginBottom: 8,
+    borderRadius: '0 4px 4px 0'
+  }}>
+    <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
+      <Avatar size="small" style={{ backgroundColor: '#6a737c' }} icon={<UserOutlined />} />
+      <Text strong style={{ color: '#0074cc', marginLeft: 8, fontSize: 13 }}>{reply.author_name}</Text>
+      {getRoleBadge(reply.author_role)}
+      <Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>
+        <ClockCircleOutlined style={{ marginRight: 4 }} />
+        {moment(reply.created_at).fromNow()}
+      </Text>
+    </div>
+    <Paragraph style={{ margin: 0, color: '#3c4146', fontSize: 14, whiteSpace: 'pre-wrap' }}>
+      {reply.content}
+    </Paragraph>
+  </div>
+);
+
+interface CommentItemProps {
+  comment: CommentType;
+  canAccept: boolean;
+  replyingTo: number | null;
+  replyContent: string;
+  submitting: boolean;
+  onToggleReply: (id: number) => void;
+  onReplyContentChange: (value: string) => void;
+  onSubmitReply: (parentId: number) => void;
+  onCancelReply: () => void;
+  onAccept: (id: number) => void;
+}
+
+const CommentItem: React.FC<CommentItemProps> = ({
+  comment,
+  canAccept,
+  replyingTo,
+  replyContent,
+  submitting,
+  onToggleReply,
+  onReplyContentChange,
+  onSubmitReply,
+  onCancelReply,
+  onAccept
+}) => (
+  <div style={{ borderBottom: '1px solid #e3e6e8', padding: '20px 0' }}>
+    <div style={{ display: 'flex', gap: 16 }}>
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        minWidth: 48,
+        gap: 8,
+        paddingTop: 4
+      }}>
+        <Button type="text" icon={<CaretUpOutlined style={{ fontSize: 24, color: '#babfc4' }} />} style={{ padding: 0, height: 'auto' }} />
+        <Text strong style={{ fontSize: 18, color: '#6a737c' }}>0</Text>
+        <Button type="text" icon={<CaretDownOutlined style={{ fontSize: 24, color: '#babfc4' }} />} style={{ padding: 0, height: 'auto' }} />
+        {comment.is_accepted ? (
+          <Tooltip title="Câu trả lời đã được chấp nhận">
+            <CheckCircleFilled style={{ fontSize: 28, color: '#5eba7d', marginTop: 4 }} />
+          </Tooltip>
+        ) : canAccept ? (
+          <Tooltip title="Chấp nhận câu trả lời này">
+            <Button
+              type="text"
+              icon={<CheckCircleOutlined style={{ fontSize: 28, color: '#babfc4' }} />}
+              onClick={() => onAccept(comment.id)}
+              style={{ padding: 0, height: 'auto', marginTop: 4 }}
+            />
+          </Tooltip>
+        ) : null}
+      </div>
+
+      <div style={{ flex: 1 }}>
+        <Paragraph style={{ fontSize: 15, lineHeight: 1.8, color: '#232629', marginBottom: 12, whiteSpace: 'pre-wrap' }}>
+          {comment.content}
+        </Paragraph>
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Button
+            type="link"
+            size="small"
+            style={{ padding: 0, color: '#6a737c', fontSize: 13 }}
+            icon={<MessageOutlined />}
+            onClick={() => onToggleReply(comment.id)}
+          >
+            Phản hồi
+          </Button>
+          <div style={{
+            backgroundColor: comment.is_accepted ? '#d3f0df' : '#e1ecf4',
+            borderRadius: 4,
+            padding: '8px 10px',
+            fontSize: 12
+          }}>
+            <Avatar size="small" style={{ backgroundColor: '#f48024', marginRight: 6 }} icon={<UserOutlined />} />
+            <Text strong style={{ color: '#0074cc' }}>{comment.author_name}</Text>
+            {getRoleBadge(comment.author_role)}
+            <br />
+            <Text type="secondary" style={{ fontSize: 11 }}>trả lời {moment(comment.created_at).fromNow()}</Text>
+          </div>
+        </div>
+
+        {replyingTo === comment.id && (
+          <div style={{ marginTop: 12, padding: 12, backgroundColor: '#f8f9f9', borderRadius: 4, border: '1px solid #e3e6e8' }}>
+            <TextArea
+              rows={3}
+              value={replyContent}
+              onChange={(e) => onReplyContentChange(e.target.value)}
+              placeholder={`Phản hồi cho ${comment.author_name}...`}
+              style={{ marginBottom: 8 }}
+            />
+            <Space>
+              <Button type="primary" size="small" loading={submitting} onClick={() => onSubmitReply(comment.id)}>Gửi phản hồi</Button>
+              <Button size="small" onClick={onCancelReply}>Hủy</Button>
+            </Space>
+          </div>
+        )}
+
+        {comment.replies && comment.replies.length > 0 && (
+          <div style={{ marginTop: 12 }}>
+            {comment.replies.map(reply => <ReplyItem key={reply.id} reply={reply} />)}
+          </div>
+        )}
+      </div>
+    </div>
+  </div>
+);
 
 const PostDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -172,10 +314,7 @@ const PostDetailPage: React.FC = () => {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({
-          post: Number(id),
-          content: answerContent
-        })
+        body: JSON.stringify({ post: Number(id), content: answerContent })
       });
       if (res.ok) {
         message.success('Đã đăng câu trả lời!');
@@ -211,11 +350,7 @@ const PostDetailPage: React.FC = () => {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({
-          post: Number(id),
-          content: replyContent,
-          parent: parentId
-        })
+        body: JSON.stringify({ post: Number(id), content: replyContent, parent: parentId })
       });
       if (res.ok) {
         message.success('Đã đăng phản hồi!');
@@ -253,129 +388,14 @@ const PostDetailPage: React.FC = () => {
     }
   };
 
-  const getRoleBadge = (role: string) => {
-    if (role === 'LECTURER') {
-      return <Tag color="blue" style={{ fontSize: 11, marginLeft: 6, borderRadius: 3 }}>Giảng viên</Tag>;
-    }
-    if (role === 'ADMIN') {
-      return <Tag color="red" style={{ fontSize: 11, marginLeft: 6, borderRadius: 3 }}>Admin</Tag>;
-    }
-    return null;
+  const handleToggleReply = (commentId: number) => {
+    setReplyingTo(replyingTo === commentId ? null : commentId);
+    setReplyContent('');
   };
 
-  const ReplyItem = ({ reply }: { reply: CommentReply }) => (
-    <div style={{
-      marginLeft: 40,
-      padding: '12px 16px',
-      backgroundColor: '#f8f9f9',
-      borderLeft: '3px solid #e3e6e8',
-      marginBottom: 8,
-      borderRadius: '0 4px 4px 0'
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
-        <Avatar size="small" style={{ backgroundColor: '#6a737c' }} icon={<UserOutlined />} />
-        <Text strong style={{ color: '#0074cc', marginLeft: 8, fontSize: 13 }}>{reply.author_name}</Text>
-        {getRoleBadge(reply.author_role)}
-        <Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>
-          <ClockCircleOutlined style={{ marginRight: 4 }} />
-          {moment(reply.created_at).fromNow()}
-        </Text>
-      </div>
-      <Paragraph style={{ margin: 0, color: '#3c4146', fontSize: 14, whiteSpace: 'pre-wrap' }}>
-        {reply.content}
-      </Paragraph>
-    </div>
-  );
-
-  const CommentItem = ({ comment }: { comment: CommentType }) => {
-    const isPostAuthor = user && post && user.username === post.author_name;
-    const isLecturer = user && user.role === 'LECTURER';
-    const canAccept = isPostAuthor || isLecturer;
-
-    return (
-      <div style={{ borderBottom: '1px solid #e3e6e8', padding: '20px 0' }}>
-        <div style={{ display: 'flex', gap: 16 }}>
-          <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            minWidth: 48,
-            gap: 8,
-            paddingTop: 4
-          }}>
-            <Button type="text" icon={<CaretUpOutlined style={{ fontSize: 24, color: '#babfc4' }} />} style={{ padding: 0, height: 'auto' }} />
-            <Text strong style={{ fontSize: 18, color: '#6a737c' }}>0</Text>
-            <Button type="text" icon={<CaretDownOutlined style={{ fontSize: 24, color: '#babfc4' }} />} style={{ padding: 0, height: 'auto' }} />
-            {comment.is_accepted ? (
-              <Tooltip title="Câu trả lời đã được chấp nhận">
-                <CheckCircleFilled style={{ fontSize: 28, color: '#5eba7d', marginTop: 4 }} />
-              </Tooltip>
-            ) : canAccept ? (
-              <Tooltip title="Chấp nhận câu trả lời này">
-                <Button
-                  type="text"
-                  icon={<CheckCircleOutlined style={{ fontSize: 28, color: '#babfc4' }} />}
-                  onClick={() => handleAcceptAnswer(comment.id)}
-                  style={{ padding: 0, height: 'auto', marginTop: 4 }}
-                />
-              </Tooltip>
-            ) : null}
-          </div>
-
-          <div style={{ flex: 1 }}>
-            <Paragraph style={{ fontSize: 15, lineHeight: 1.8, color: '#232629', marginBottom: 12, whiteSpace: 'pre-wrap' }}>
-              {comment.content}
-            </Paragraph>
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Button
-                type="link"
-                size="small"
-                style={{ padding: 0, color: '#6a737c', fontSize: 13 }}
-                icon={<MessageOutlined />}
-                onClick={() => setReplyingTo(replyingTo === comment.id ? null : comment.id)}
-              >
-                Phản hồi
-              </Button>
-              <div style={{
-                backgroundColor: comment.is_accepted ? '#d3f0df' : '#e1ecf4',
-                borderRadius: 4,
-                padding: '8px 10px',
-                fontSize: 12
-              }}>
-                <Avatar size="small" style={{ backgroundColor: '#f48024', marginRight: 6 }} icon={<UserOutlined />} />
-                <Text strong style={{ color: '#0074cc' }}>{comment.author_name}</Text>
-                {getRoleBadge(comment.author_role)}
-                <br />
-                <Text type="secondary" style={{ fontSize: 11 }}>trả lời {moment(comment.created_at).fromNow()}</Text>
-              </div>
-            </div>
-
-            {replyingTo === comment.id && (
-              <div style={{ marginTop: 12, padding: 12, backgroundColor: '#f8f9f9', borderRadius: 4, border: '1px solid #e3e6e8' }}>
-                <TextArea
-                  rows={3}
-                  value={replyContent}
-                  onChange={(e) => setReplyContent(e.target.value)}
-                  placeholder={`Phản hồi cho ${comment.author_name}...`}
-                  style={{ marginBottom: 8 }}
-                />
-                <Space>
-                  <Button type="primary" size="small" loading={submitting} onClick={() => handleSubmitReply(comment.id)}>Gửi phản hồi</Button>
-                  <Button size="small" onClick={() => { setReplyingTo(null); setReplyContent(''); }}>Hủy</Button>
-                </Space>
-              </div>
-            )}
-
-            {comment.replies && comment.replies.length > 0 && (
-              <div style={{ marginTop: 12 }}>
-                {comment.replies.map(reply => <ReplyItem key={reply.id} reply={reply} />)}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    );
+  const handleCancelReply = () => {
+    setReplyingTo(null);
+    setReplyContent('');
   };
 
   if (loading) {
@@ -393,6 +413,10 @@ const PostDetailPage: React.FC = () => {
       </div>
     );
   }
+
+  const isPostAuthor = user && user.username === post.author_name;
+  const isLecturer = user && user.role === 'LECTURER';
+  const canAccept = isPostAuthor || isLecturer;
 
   return (
     <ConfigProvider
@@ -510,7 +534,21 @@ const PostDetailPage: React.FC = () => {
             </div>
 
             {comments.length > 0 ? (
-              comments.map(comment => <CommentItem key={comment.id} comment={comment} />)
+              comments.map(comment => (
+                <CommentItem
+                  key={comment.id}
+                  comment={comment}
+                  canAccept={!!canAccept}
+                  replyingTo={replyingTo}
+                  replyContent={replyContent}
+                  submitting={submitting}
+                  onToggleReply={handleToggleReply}
+                  onReplyContentChange={setReplyContent}
+                  onSubmitReply={handleSubmitReply}
+                  onCancelReply={handleCancelReply}
+                  onAccept={handleAcceptAnswer}
+                />
+              ))
             ) : (
               <div style={{ padding: '40px 0', textAlign: 'center' }}>
                 <Text type="secondary" style={{ fontSize: 15 }}>Chưa có câu trả lời nào. Hãy là người đầu tiên trả lời!</Text>
