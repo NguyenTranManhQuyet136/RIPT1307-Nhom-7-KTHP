@@ -178,7 +178,12 @@ const ForumPage: React.FC = () => {
         </Col>
         <Col span={20}>
           <Title level={4} style={{ marginTop: 0, marginBottom: 4 }}>
-            <a style={{ color: '#0074cc', fontSize: 17, fontWeight: 400 }}>{post.title}</a>
+            <a
+              style={{ color: '#0074cc', fontSize: 17, fontWeight: 400, cursor: 'pointer' }}
+              onClick={() => history.push(`/forum/post/${post.id}`)}
+            >
+              {post.title}
+            </a>
           </Title>
           <Paragraph ellipsis={{ rows: 2 }} style={{ color: '#3c4146', marginBottom: 8 }}>
             {post.content}
