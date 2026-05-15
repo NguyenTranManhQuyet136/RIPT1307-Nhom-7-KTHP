@@ -5,6 +5,7 @@ export default defineConfig({
     { path: "/", component: "index" },
     { path: "/docs", component: "docs" },
     { path: "/auth", component: "auth", layout: false },
+    { path: "/forum", component: "forum/index", layout: false },
     { path: "/reset-password", component: "reset-password", layout: false },
   ],
   npmClient: 'npm',
