@@ -160,23 +160,32 @@ const CommentItem: React.FC<CommentItemProps> = ({
         <Button type="text" icon={<CaretUpOutlined style={{ fontSize: 24, color: '#babfc4' }} />} style={{ padding: 0, height: 'auto' }} />
         <Text strong style={{ fontSize: 18, color: '#6a737c' }}>0</Text>
         <Button type="text" icon={<CaretDownOutlined style={{ fontSize: 24, color: '#babfc4' }} />} style={{ padding: 0, height: 'auto' }} />
-        {comment.is_accepted ? (
-          <Tooltip title="Câu trả lời đã được chấp nhận">
-            <CheckCircleFilled style={{ fontSize: 28, color: '#5eba7d', marginTop: 4 }} />
-          </Tooltip>
-        ) : canAccept ? (
-          <Tooltip title="Chấp nhận câu trả lời này">
+        {canAccept ? (
+          <Tooltip title={comment.is_accepted ? "Bỏ chấp nhận câu trả lời" : "Chấp nhận câu trả lời"}>
             <Button
               type="text"
-              icon={<CheckCircleOutlined style={{ fontSize: 28, color: '#babfc4' }} />}
+              icon={comment.is_accepted ? 
+                <CheckCircleFilled style={{ fontSize: 28, color: '#5eba7d' }} /> : 
+                <CheckCircleOutlined style={{ fontSize: 28, color: '#babfc4' }} />
+              }
               onClick={() => onAccept(comment.id)}
               style={{ padding: 0, height: 'auto', marginTop: 4 }}
             />
+          </Tooltip>
+        ) : comment.is_accepted ? (
+          <Tooltip title="Câu trả lời đã được chấp nhận">
+            <CheckCircleFilled style={{ fontSize: 28, color: '#5eba7d', marginTop: 4 }} />
           </Tooltip>
         ) : null}
       </div>
 
       <div style={{ flex: 1 }}>
+        {comment.is_accepted && (
+          <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', color: '#5eba7d' }}>
+            <CheckOutlined style={{ marginRight: 8, fontSize: 16, fontWeight: 'bold' }} />
+            <Text strong style={{ color: '#5eba7d', fontSize: 14 }}>CÂU TRẢ LỜI ĐƯỢC CHẤP NHẬN</Text>
+          </div>
+        )}
         <Paragraph style={{ fontSize: 15, lineHeight: 1.8, color: '#232629', marginBottom: 12, whiteSpace: 'pre-wrap' }}>
           {comment.content}
         </Paragraph>
