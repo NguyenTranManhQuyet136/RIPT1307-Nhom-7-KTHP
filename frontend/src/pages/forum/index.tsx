@@ -59,6 +59,7 @@ interface Post {
   content: string;
   author_name: string;
   tags: TagType[];
+  comment_count: number;
   view_count: number;
   created_at: string;
 }
@@ -170,7 +171,7 @@ const ForumPage: React.FC = () => {
             <Text strong style={{ color: '#0c0d0e' }}>0</Text> <Text size="small">votes</Text>
           </div>
           <div style={{ border: '1px solid #5eba7d', borderRadius: 3, padding: '2px 4px', color: '#5eba7d', marginBottom: 8 }}>
-            <Text strong style={{ color: '#5eba7d' }}>0</Text> <Text size="small" style={{ color: '#5eba7d' }}>answers</Text>
+            <Text strong style={{ color: '#5eba7d' }}>{post.comment_count}</Text> <Text size="small" style={{ color: '#5eba7d' }}>câu trả lời</Text>
           </div>
           <div style={{ fontSize: 12 }}>
             <EyeOutlined /> {post.view_count} lượt xem

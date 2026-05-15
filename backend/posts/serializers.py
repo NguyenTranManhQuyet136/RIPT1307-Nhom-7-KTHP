@@ -16,15 +16,19 @@ class PostSerializer(serializers.ModelSerializer):
     
     # Hiển thị tên tác giả thay vì chỉ hiện ID
     author_name = serializers.ReadOnlyField(source='author.username')
+    comment_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Post
         fields = [
             'id', 'title', 'content', 'author', 'author_name', 
-            'tags', 'tag_names', 'view_count', 'is_closed', 
+            'tags', 'tag_names', 'view_count', 'comment_count', 'is_closed', 
             'created_at', 'updated_at'
         ]
         read_only_fields = ['author', 'view_count', 'created_at', 'updated_at']
+
+    def get_comment_count(self, obj):
+        return obj.comments.count()
 
     def create(self, validated_data):
         # Lấy danh sách tên tag ra trước khi tạo Post
