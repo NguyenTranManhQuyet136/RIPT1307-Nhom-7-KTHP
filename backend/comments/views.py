@@ -46,3 +46,38 @@ class CommentViewSet(viewsets.ModelViewSet):
         
         comment.save()
         return Response({'detail': msg, 'is_accepted': comment.is_accepted})
+
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
+    def vote(self, request, pk=None):
+        comment = self.get_object()
+        user = request.user
+        value = int(request.data.get('value', 0))
+
+        if value not in [-1, 1]:
+            return Response({'detail': 'Giá trị vote không hợp lệ'}, status=status.HTTP_400_BAD_REQUEST)
+
+        from .models import CommentVote
+        vote_obj = CommentVote.objects.filter(user=user, comment=comment).first()
+
+        if vote_obj:
+            if vote_obj.value == value:
+                vote_obj.delete()
+                status_str = 'unvoted'
+            else:
+                vote_obj.value = value
+                vote_obj.save()
+                status_str = 'voted'
+        else:
+            CommentVote.objects.create(user=user, comment=comment, value=value)
+            status_str = 'voted'
+
+        return Response({
+            'status': status_str,
+            'score': self.get_score(comment),
+            'user_vote': value if status_str == 'voted' else 0
+        })
+
+    def get_score(self, comment):
+        from django.db.models import Sum
+        return comment.votes.aggregate(Sum('value'))['value__sum'] or 0
+
