@@ -1,4 +1,5 @@
-from rest_framework import viewsets, permissions
+from rest_framework import viewsets, permissions, status
+from rest_framework.response import Response
 from .models import Post
 from .serializers import PostSerializer
 from drf_spectacular.utils import extend_schema
@@ -22,6 +23,15 @@ class PostViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(tags__name=tag_name.lower())
         return queryset
     
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        # Tăng lượt xem lên 1
+        instance.view_count += 1
+        instance.save(update_fields=['view_count'])
+        
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
+
     @extend_schema(
         summary="Tạo bài viết mới",
         description="Gửi title, content và danh sách tag_names (mảng string). Hệ thống tự tạo tag nếu chưa có."
