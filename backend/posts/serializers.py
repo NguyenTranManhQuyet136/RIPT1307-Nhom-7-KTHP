@@ -14,17 +14,34 @@ class PostSerializer(serializers.ModelSerializer):
         required=False
     )
     
-    # Hiển thị tên tác giả thay vì chỉ hiện ID
     author_name = serializers.ReadOnlyField(source='author.username')
+    comment_count = serializers.SerializerMethodField()
+    score = serializers.SerializerMethodField()
+    user_vote = serializers.SerializerMethodField()
 
     class Meta:
         model = Post
         fields = [
             'id', 'title', 'content', 'author', 'author_name', 
-            'tags', 'tag_names', 'view_count', 'is_closed', 
+            'tags', 'tag_names', 'view_count', 'comment_count', 
+            'score', 'user_vote', 'is_closed', 
             'created_at', 'updated_at'
         ]
         read_only_fields = ['author', 'view_count', 'created_at', 'updated_at']
+
+    def get_comment_count(self, obj):
+        return obj.comments.count()
+
+    def get_score(self, obj):
+        from django.db.models import Sum
+        return obj.votes.aggregate(Sum('value'))['value__sum'] or 0
+
+    def get_user_vote(self, obj):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            vote = obj.votes.filter(user=request.user).first()
+            return vote.value if vote else 0
+        return 0
 
     def create(self, validated_data):
         # Lấy danh sách tên tag ra trước khi tạo Post

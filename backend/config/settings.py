@@ -42,7 +42,8 @@ INSTALLED_APPS = [
     'drf_spectacular',
     'accounts',
     'posts',
-    'tags', 
+    'tags',
+    'comments',
 ]
 
 MIDDLEWARE = [

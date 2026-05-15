@@ -27,8 +27,8 @@ Thumbs.db
 
 # Python / Django
 backend/venv/
-backend/__pycache__/
-backend/*.pyc
+**/__pycache__/
+*.pyc
 backend/*.pyo
 backend/*.pyd
 backend/.env

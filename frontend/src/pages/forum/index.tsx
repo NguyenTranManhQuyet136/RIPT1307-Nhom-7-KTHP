@@ -59,7 +59,9 @@ interface Post {
   content: string;
   author_name: string;
   tags: TagType[];
+  comment_count: number;
   view_count: number;
+  score: number;
   created_at: string;
 }
 
@@ -167,18 +169,23 @@ const ForumPage: React.FC = () => {
       <Row gutter={16}>
         <Col span={4} style={{ textAlign: 'right', color: '#6a737c' }}>
           <div style={{ marginBottom: 8 }}>
-            <Text strong style={{ color: '#0c0d0e' }}>0</Text> <Text size="small">votes</Text>
+            <Text strong style={{ color: '#0c0d0e' }}>{post.score}</Text> <Text size="small">votes</Text>
           </div>
           <div style={{ border: '1px solid #5eba7d', borderRadius: 3, padding: '2px 4px', color: '#5eba7d', marginBottom: 8 }}>
-            <Text strong style={{ color: '#5eba7d' }}>0</Text> <Text size="small" style={{ color: '#5eba7d' }}>answers</Text>
+            <Text strong style={{ color: '#5eba7d' }}>{post.comment_count}</Text> <Text size="small" style={{ color: '#5eba7d' }}>câu trả lời</Text>
           </div>
           <div style={{ fontSize: 12 }}>
-            <EyeOutlined /> {post.view_count} views
+            <EyeOutlined /> {post.view_count} lượt xem
           </div>
         </Col>
         <Col span={20}>
           <Title level={4} style={{ marginTop: 0, marginBottom: 4 }}>
-            <a style={{ color: '#0074cc', fontSize: 17, fontWeight: 400 }}>{post.title}</a>
+            <a
+              style={{ color: '#0074cc', fontSize: 17, fontWeight: 400, cursor: 'pointer' }}
+              onClick={() => history.push(`/forum/post/${post.id}`)}
+            >
+              {post.title}
+            </a>
           </Title>
           <Paragraph ellipsis={{ rows: 2 }} style={{ color: '#3c4146', marginBottom: 8 }}>
             {post.content}
