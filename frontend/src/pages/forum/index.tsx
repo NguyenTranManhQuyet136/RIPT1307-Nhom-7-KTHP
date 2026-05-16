@@ -201,7 +201,23 @@ const ForumPage: React.FC = () => {
       <Row gutter={16}>
         <Col span={4} style={{ textAlign: 'right', color: '#6a737c' }}>
           <div style={{ marginBottom: 8 }}>
-            <Text strong style={{ color: '#0c0d0e' }}>{post.score}</Text> <Text style={{ fontSize: '12px' }}>votes</Text>
+            <Text 
+              strong 
+              style={{ 
+                color: post.score > 0 ? '#5eba7d' : post.score < 0 ? '#d12d2d' : '#0c0d0e' 
+              }}
+            >
+              {post.score}
+            </Text> 
+            <Text 
+              style={{ 
+                fontSize: '12px',
+                color: post.score > 0 ? '#5eba7d' : post.score < 0 ? '#d12d2d' : '#6a737c',
+                marginLeft: 4
+              }}
+            >
+              votes
+            </Text>
           </div>
           <div style={{ border: '1px solid #5eba7d', borderRadius: 3, padding: '2px 4px', color: '#5eba7d', marginBottom: 8 }}>
             <Text strong style={{ color: '#5eba7d' }}>{post.comment_count}</Text> <Text style={{ fontSize: '12px', color: '#5eba7d' }}>câu trả lời</Text>
@@ -239,7 +255,7 @@ const ForumPage: React.FC = () => {
                 </Tag>
               ))}
             </Space>
-            <div style={{ fontSize: 12, color: '#6a737c' }}>
+            <div style={{ fontSize: 12, color: '#6a737c', marginLeft: 'auto' }}>
               <Avatar size="small" icon={<UserOutlined />} style={{ marginRight: 4 }} />
               <Text strong style={{ color: '#0074cc' }}>{post.author_name}</Text>
               <Text style={{ marginLeft: 4 }}>hỏi {moment(post.created_at).fromNow()}</Text>
