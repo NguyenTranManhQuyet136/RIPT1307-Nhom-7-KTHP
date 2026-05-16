@@ -73,13 +73,29 @@ const ForumPage: React.FC = () => {
   const [form] = Form.useForm();
   const [user, setUser] = useState<any>(null);
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [ordering, setOrdering] = useState('-created_at');
+  const [unanswered, setUnanswered] = useState(false);
 
   const BASE_URL = 'http://localhost:8002';
 
-  const fetchData = async (tag?: string) => {
+  const fetchData = async (params: { tag?: string; search?: string; ordering?: string; unanswered?: boolean } = {}) => {
     setLoading(true);
     try {
-      const url = tag ? `${BASE_URL}/api/posts/?tag=${tag}` : `${BASE_URL}/api/posts/`;
+      const { 
+        tag = selectedTag, 
+        search = searchQuery, 
+        ordering: ord = ordering, 
+        unanswered: unans = unanswered 
+      } = params;
+
+      const queryParams = new URLSearchParams();
+      if (tag) queryParams.append('tag', tag);
+      if (search) queryParams.append('search', search);
+      if (ord) queryParams.append('ordering', ord);
+      if (unans) queryParams.append('unanswered', 'true');
+
+      const url = `${BASE_URL}/api/posts/?${queryParams.toString()}`;
       const res = await fetch(url);
       const data = await res.json();
       setPosts(data);
@@ -154,7 +170,23 @@ const ForumPage: React.FC = () => {
 
   const filterByTag = (tagName: string | null) => {
     setSelectedTag(tagName);
-    fetchData(tagName || undefined);
+    fetchData({ tag: tagName || undefined });
+  };
+
+  const handleSearch = (value: string) => {
+    setSearchQuery(value);
+    fetchData({ search: value });
+  };
+
+  const handleOrderingChange = (newOrdering: string) => {
+    setOrdering(newOrdering);
+    fetchData({ ordering: newOrdering });
+  };
+
+  const toggleUnanswered = () => {
+    const newVal = !unanswered;
+    setUnanswered(newVal);
+    fetchData({ unanswered: newVal });
   };
 
   const userMenuItems: MenuProps['items'] = [
@@ -201,7 +233,7 @@ const ForumPage: React.FC = () => {
                     border: 'none', 
                     cursor: 'pointer' 
                   }}
-                  onClick={() => filterByTag(t.name)}
+                  onClick={() => filterByTag(t.slug)}
                 >
                   {t.name}
                 </Tag>
@@ -252,10 +284,16 @@ const ForumPage: React.FC = () => {
             </div>
 
             <div style={{ flex: 1, padding: '0 24px 0 0' }}>
-              <Input 
-                prefix={<SearchOutlined style={{ color: '#838c95' }} />} 
+              <Input.Search 
                 placeholder="Tìm kiếm câu hỏi..." 
-                style={{ borderRadius: 3, border: '1px solid #babfc4' }}
+                onSearch={handleSearch}
+                allowClear
+                style={{ borderRadius: 3 }}
+                enterButton={
+                  <Button type="primary" style={{ backgroundColor: '#f48024', borderColor: '#f48024' }}>
+                    <SearchOutlined />
+                  </Button>
+                }
               />
             </div>
 
@@ -318,9 +356,24 @@ const ForumPage: React.FC = () => {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <Text style={{ fontSize: 18 }}>{posts.length} câu hỏi</Text>
               <Space.Compact block={false}>
-                <Button>Mới nhất</Button>
-                <Button>Phổ biến</Button>
-                <Button>Chưa trả lời</Button>
+                <Button 
+                  type={ordering === '-created_at' ? 'primary' : 'default'}
+                  onClick={() => handleOrderingChange('-created_at')}
+                >
+                  Mới nhất
+                </Button>
+                <Button 
+                  type={ordering === '-view_count' ? 'primary' : 'default'}
+                  onClick={() => handleOrderingChange('-view_count')}
+                >
+                  Phổ biến
+                </Button>
+                <Button 
+                  type={unanswered ? 'primary' : 'default'}
+                  onClick={toggleUnanswered}
+                >
+                  Chưa trả lời
+                </Button>
               </Space.Compact>
             </div>
 
@@ -354,7 +407,7 @@ const ForumPage: React.FC = () => {
                       cursor: 'pointer',
                       margin: '2px' 
                     }}
-                    onClick={() => filterByTag(t.name)}
+                    onClick={() => filterByTag(t.slug)}
                   >
                     {t.name} x {t.post_count}
                   </Tag>

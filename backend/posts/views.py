@@ -1,4 +1,6 @@
 from rest_framework import viewsets, permissions, status, filters
+from rest_framework.decorators import action
+from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from .models import Post
 from .serializers import PostSerializer
@@ -32,7 +34,9 @@ class PostViewSet(viewsets.ModelViewSet):
     ordering = ['-created_at']
 
     def perform_create(self, serializer):
-    
+        # Tự động gán người đang đăng nhập làm tác giả của bài viết
+        serializer.save(author=self.request.user)
+
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
         
