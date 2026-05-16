@@ -1,8 +1,8 @@
-from rest_framework import viewsets, permissions, status
-from rest_framework.decorators import action
-from rest_framework.response import Response
+from rest_framework import viewsets, permissions, status, filters
+from django_filters.rest_framework import DjangoFilterBackend
 from .models import Post
 from .serializers import PostSerializer
+from .filters import PostFilter
 from drf_spectacular.utils import extend_schema
 
 class PostViewSet(viewsets.ModelViewSet):
@@ -12,17 +12,26 @@ class PostViewSet(viewsets.ModelViewSet):
     # Phân quyền: Ai cũng được xem, nhưng phải đăng nhập mới được đăng/sửa/xóa
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
-    def perform_create(self, serializer):
-        # Tự động gán người đang đăng nhập làm tác giả của bài viết
-        serializer.save(author=self.request.user)
+    # Khai báo các bộ lọc sử dụng
+    filter_backends = [
+        DjangoFilterBackend,    # Lọc chính xác (theo Tag, trạng thái, chưa trả lời)
+        filters.SearchFilter,   # Tìm kiếm từ khóa (Khớp một phần)
+        filters.OrderingFilter  # Sắp xếp (Mới nhất, xem nhiều nhất)
+    ]
 
-    def get_queryset(self):
-        # Hỗ trợ lọc bài viết theo tag nếu có query param ?tag=python
-        queryset = Post.objects.all()
-        tag_name = self.request.query_params.get('tag')
-        if tag_name:
-            queryset = queryset.filter(tags__name=tag_name.lower())
-        return queryset
+    # Kết nối với Class Filter tùy chỉnh
+    filterset_class = PostFilter
+
+    # Các trường cho phép TÌM KIẾM TỪ KHÓA
+    search_fields = ['title', 'content']
+
+    # Các trường cho phép SẮP XẾP
+    ordering_fields = ['created_at', 'view_count']
+    
+    # Mặc định bài mới nhất lên đầu
+    ordering = ['-created_at']
+
+    def perform_create(self, serializer):
     
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
