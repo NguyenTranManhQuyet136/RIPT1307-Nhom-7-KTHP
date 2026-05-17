@@ -13,7 +13,8 @@ import {
   Col, 
   Modal, 
   Form, 
-  message, 
+  message,
+  notification,
   ConfigProvider, 
   theme,
   List,
@@ -37,7 +38,10 @@ import {
   LogoutOutlined,
   FireOutlined,
   BellOutlined,
-  SettingOutlined
+  SettingOutlined,
+  CheckCircleFilled,
+  CloseCircleFilled,
+  ExclamationCircleFilled
 } from '@ant-design/icons';
 import { history } from 'umi';
 import moment from 'moment';
@@ -84,6 +88,33 @@ const ForumPage: React.FC = () => {
   const [fullSearchText, setFullSearchText] = useState('');
   const [notifications, setNotifications] = useState<any[]>([]);
   const [unreadCount, setUnreadCount] = useState<number>(0);
+  const notifiedIdsRef = React.useRef<Set<number>>(new Set());
+  const isFirstLoadRef = React.useRef(true);
+  const [activeToast, setActiveToast] = useState<{ id: any; type: string; message: string; target_post_id?: any } | null>(null);
+
+  const showSuccess = (msg: string) => {
+    setActiveToast({
+      id: Date.now(),
+      type: 'SUCCESS',
+      message: msg
+    });
+  };
+
+  const showError = (msg: string) => {
+    setActiveToast({
+      id: Date.now(),
+      type: 'ERROR',
+      message: msg
+    });
+  };
+
+  const showWarning = (msg: string) => {
+    setActiveToast({
+      id: Date.now(),
+      type: 'WARNING',
+      message: msg
+    });
+  };
 
   const BASE_URL = 'http://localhost:8002';
 
@@ -113,7 +144,7 @@ const ForumPage: React.FC = () => {
       // Đảm bảo tương thích cả khi Backend có phân trang hoặc không
       setPosts(data.results || (Array.isArray(data) ? data : []));
     } catch (error) {
-      message.error('Không thể tải bài viết');
+      showError('Không thể tải bài viết');
     } finally {
       setLoading(false);
     }
@@ -129,6 +160,16 @@ const ForumPage: React.FC = () => {
     }
   };
 
+  const triggerRealtimeToast = (item: any) => {
+    setActiveToast({
+      id: item.id,
+      type: item.notification_type,
+      message: item.message,
+      target_post_id: item.target_post_id,
+      actor_name: item.actor_name
+    });
+  };
+
   const fetchNotifications = async () => {
     const token = localStorage.getItem('access_token');
     if (!token) return;
@@ -141,17 +182,36 @@ const ForumPage: React.FC = () => {
         setNotifications(data);
         const unread = data.filter((n: any) => !n.is_read).length;
         setUnreadCount(unread);
+
+        // Phát hiện và hiển thị Toast kiểu Facebook cho thông báo mới
+        data.forEach((item: any) => {
+          if (!item.is_read && !notifiedIdsRef.current.has(item.id)) {
+            notifiedIdsRef.current.add(item.id);
+            if (!isFirstLoadRef.current) {
+              triggerRealtimeToast(item);
+            }
+          }
+        });
+
+        if (isFirstLoadRef.current) {
+          data.forEach((item: any) => {
+            if (!item.is_read) {
+              notifiedIdsRef.current.add(item.id);
+            }
+          });
+          isFirstLoadRef.current = false;
+        }
       }
     } catch (e) {
       console.error('Lỗi tải thông báo', e);
     }
   };
 
-  const handleReadNotification = async (notification: any) => {
-    if (!notification.is_read) {
+  const handleReadNotification = async (notificationItem: any) => {
+    if (!notificationItem.is_read) {
       const token = localStorage.getItem('access_token');
       try {
-        await fetch(`${BASE_URL}/api/notifications/${notification.id}/`, {
+        await fetch(`${BASE_URL}/api/notifications/${notificationItem.id}/`, {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
@@ -160,7 +220,7 @@ const ForumPage: React.FC = () => {
           body: JSON.stringify({ is_read: true })
         });
         setNotifications(prev => 
-          prev.map(n => n.id === notification.id ? { ...n, is_read: true } : n)
+          prev.map(n => n.id === notificationItem.id ? { ...n, is_read: true } : n)
         );
         setUnreadCount(c => Math.max(0, c - 1));
       } catch (e) {
@@ -168,8 +228,11 @@ const ForumPage: React.FC = () => {
       }
     }
     
-    if (notification.target_post_id) {
-      history.push(`/forum/post/${notification.target_post_id}`);
+    // Tự động đóng toast nếu có
+    notification.destroy(notificationItem.id);
+
+    if (notificationItem.target_post_id) {
+      history.push(`/forum/post/${notificationItem.target_post_id}`);
     }
   };
 
@@ -181,9 +244,13 @@ const ForumPage: React.FC = () => {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
+        // Tắt tất cả các toasts đang hiển thị
+        notifications.forEach(n => {
+          notification.destroy(n.id);
+        });
         setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
         setUnreadCount(0);
-        message.success('Đã đánh dấu tất cả thông báo là đã đọc');
+        showSuccess('Đã đánh dấu tất cả thông báo là đã đọc');
       }
     } catch (e) {
       console.error(e);
@@ -191,6 +258,17 @@ const ForumPage: React.FC = () => {
   };
 
   useEffect(() => {
+    const pendingToastSuccess = localStorage.getItem('trigger_toast_success');
+    if (pendingToastSuccess) {
+      showSuccess(pendingToastSuccess);
+      localStorage.removeItem('trigger_toast_success');
+    }
+    const pendingToastError = localStorage.getItem('trigger_toast_error');
+    if (pendingToastError) {
+      showError(pendingToastError);
+      localStorage.removeItem('trigger_toast_error');
+    }
+
     const savedUser = localStorage.getItem('user');
     let interval: any;
     if (savedUser) {
@@ -210,10 +288,19 @@ const ForumPage: React.FC = () => {
     };
   }, []);
 
+  useEffect(() => {
+    if (activeToast) {
+      const timer = setTimeout(() => {
+        setActiveToast(null);
+      }, 3500);
+      return () => clearTimeout(timer);
+    }
+  }, [activeToast]);
+
   const handleCreatePost = async (values: any) => {
     const token = localStorage.getItem('access_token');
     if (!token) {
-      message.warning('Vui lòng đăng nhập để đăng bài');
+      showWarning('Vui lòng đăng nhập để đăng bài');
       history.push('/auth');
       return;
     }
@@ -235,16 +322,16 @@ const ForumPage: React.FC = () => {
       });
 
       if (res.ok) {
-        message.success('Đăng bài thành công!');
+        showSuccess('Đăng bài thành công! Câu hỏi của bạn đã được đăng công khai trên diễn đàn.');
         setIsModalOpen(false);
         form.resetFields();
         fetchData();
         fetchTags();
       } else {
-        message.error('Có lỗi xảy ra khi đăng bài');
+        showError('Có lỗi xảy ra khi đăng bài');
       }
     } catch (error) {
-      message.error('Lỗi kết nối server');
+      showError('Lỗi kết nối server');
     } finally {
       setLoading(false);
     }
@@ -1062,6 +1149,80 @@ const ForumPage: React.FC = () => {
             </div>
           </Form>
         </Modal>
+        {activeToast && (
+          <div 
+            onClick={() => {
+              if (activeToast.type === 'SUCCESS' || activeToast.type === 'ERROR' || activeToast.type === 'WARNING') {
+                setActiveToast(null);
+              } else {
+                handleReadNotification(activeToast);
+                setActiveToast(null);
+              }
+            }}
+            style={{
+              position: 'fixed',
+              bottom: 16,
+              left: 'max(16px, calc(max(0px, (100vw - 1264px) / 2) + 164px - 300px - 16px))',
+              width: 300,
+              background: '#fff',
+              borderRadius: 0,
+              border: '1px solid #e3e6e8',
+              padding: '14px 18px',
+              cursor: 'pointer',
+              zIndex: 9999,
+              display: 'flex',
+              gap: 12,
+              alignItems: 'center'
+            }}
+          >
+            {activeToast.type === 'WELCOME' ? (
+              <Avatar size={42} style={{ backgroundColor: '#f48024', flexShrink: 0 }} icon={<UserOutlined />} />
+            ) : (activeToast.type === 'REPLY_POST' || activeToast.type === 'REPLY_COMMENT') ? (
+              activeToast.actor_name ? (
+                <Avatar size={42} style={{ backgroundColor: '#0074cc', flexShrink: 0, fontWeight: 700, fontSize: 18 }}>
+                  {activeToast.actor_name.charAt(0).toUpperCase()}
+                </Avatar>
+              ) : (
+                <Avatar size={42} style={{ backgroundColor: '#0074cc', flexShrink: 0 }} icon={<UserOutlined />} />
+              )
+            ) : user && user.avatar ? (
+              <Avatar size={42} src={user.avatar} style={{ flexShrink: 0 }} />
+            ) : user && user.username ? (
+              <Avatar size={42} style={{ backgroundColor: '#f48024', flexShrink: 0, fontWeight: 700, fontSize: 18 }}>
+                {user.username.charAt(0).toUpperCase()}
+              </Avatar>
+            ) : (
+              <Avatar size={42} style={{ backgroundColor: '#f48024', flexShrink: 0 }} icon={<UserOutlined />} />
+            )}
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ 
+                fontSize: 14, 
+                fontWeight: 700, 
+                color: activeToast.type === 'SUCCESS' ? '#5eba7d' : 
+                       activeToast.type === 'ERROR' ? '#d12d2d' : '#f48024',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                marginBottom: 2
+              }}>
+                {activeToast.type === 'SUCCESS' ? 'Thành công' :
+                 activeToast.type === 'ERROR' ? 'Thất bại' :
+                 activeToast.type === 'WARNING' ? 'Cảnh báo' : 'Thông báo'}
+              </div>
+              <div style={{ 
+                fontSize: 12.5, 
+                color: '#232629', 
+                lineHeight: 1.4, 
+                display: '-webkit-box', 
+                WebkitLineClamp: 3, 
+                WebkitBoxOrient: 'vertical', 
+                overflow: 'hidden' 
+              }}>
+                {activeToast.message}
+              </div>
+            </div>
+          </div>
+        )}
       </Layout>
     </ConfigProvider>
   );

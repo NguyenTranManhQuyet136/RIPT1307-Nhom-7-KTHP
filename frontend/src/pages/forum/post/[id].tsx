@@ -8,6 +8,7 @@ import {
   Typography,
   Avatar,
   message,
+  notification,
   ConfigProvider,
   theme,
   Badge,
@@ -33,7 +34,9 @@ import {
   CaretDownOutlined,
   MessageOutlined,
   ClockCircleOutlined,
-  CheckOutlined
+  CheckOutlined,
+  CloseCircleFilled,
+  ExclamationCircleFilled
 } from '@ant-design/icons';
 import { history, useParams } from 'umi';
 import moment from 'moment';
@@ -287,6 +290,33 @@ const PostDetailPage: React.FC = () => {
   const [replyContent, setReplyContent] = useState('');
   const [notifications, setNotifications] = useState<any[]>([]);
   const [unreadCount, setUnreadCount] = useState<number>(0);
+  const notifiedIdsRef = React.useRef<Set<number>>(new Set());
+  const isFirstLoadRef = React.useRef(true);
+  const [activeToast, setActiveToast] = useState<{ id: any; type: string; message: string; target_post_id?: any } | null>(null);
+
+  const showSuccess = (msg: string) => {
+    setActiveToast({
+      id: Date.now(),
+      type: 'SUCCESS',
+      message: msg
+    });
+  };
+
+  const showError = (msg: string) => {
+    setActiveToast({
+      id: Date.now(),
+      type: 'ERROR',
+      message: msg
+    });
+  };
+
+  const showWarning = (msg: string) => {
+    setActiveToast({
+      id: Date.now(),
+      type: 'WARNING',
+      message: msg
+    });
+  };
 
   const BASE_URL = 'http://localhost:8002';
 
@@ -301,11 +331,11 @@ const PostDetailPage: React.FC = () => {
         const data = await res.json();
         setPost(data);
       } else {
-        message.error('Không tìm thấy bài viết');
+        showError('Không tìm thấy bài viết');
         history.push('/forum');
       }
     } catch (error) {
-      message.error('Lỗi kết nối server');
+      showError('Lỗi kết nối server');
     }
   };
 
@@ -325,6 +355,16 @@ const PostDetailPage: React.FC = () => {
     }
   };
 
+  const triggerRealtimeToast = (item: any) => {
+    setActiveToast({
+      id: item.id,
+      type: item.notification_type,
+      message: item.message,
+      target_post_id: item.target_post_id,
+      actor_name: item.actor_name
+    });
+  };
+
   const fetchNotifications = async () => {
     const token = localStorage.getItem('access_token');
     if (!token) return;
@@ -337,17 +377,36 @@ const PostDetailPage: React.FC = () => {
         setNotifications(data);
         const unread = data.filter((n: any) => !n.is_read).length;
         setUnreadCount(unread);
+
+        // Phát hiện và hiển thị Toast kiểu Facebook cho thông báo mới
+        data.forEach((item: any) => {
+          if (!item.is_read && !notifiedIdsRef.current.has(item.id)) {
+            notifiedIdsRef.current.add(item.id);
+            if (!isFirstLoadRef.current) {
+              triggerRealtimeToast(item);
+            }
+          }
+        });
+
+        if (isFirstLoadRef.current) {
+          data.forEach((item: any) => {
+            if (!item.is_read) {
+              notifiedIdsRef.current.add(item.id);
+            }
+          });
+          isFirstLoadRef.current = false;
+        }
       }
     } catch (e) {
       console.error('Lỗi tải thông báo', e);
     }
   };
 
-  const handleReadNotification = async (notification: any) => {
-    if (!notification.is_read) {
+  const handleReadNotification = async (notificationItem: any) => {
+    if (!notificationItem.is_read) {
       const token = localStorage.getItem('access_token');
       try {
-        await fetch(`${BASE_URL}/api/notifications/${notification.id}/`, {
+        await fetch(`${BASE_URL}/api/notifications/${notificationItem.id}/`, {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
@@ -356,7 +415,7 @@ const PostDetailPage: React.FC = () => {
           body: JSON.stringify({ is_read: true })
         });
         setNotifications(prev => 
-          prev.map(n => n.id === notification.id ? { ...n, is_read: true } : n)
+          prev.map(n => n.id === notificationItem.id ? { ...n, is_read: true } : n)
         );
         setUnreadCount(c => Math.max(0, c - 1));
       } catch (e) {
@@ -364,8 +423,11 @@ const PostDetailPage: React.FC = () => {
       }
     }
     
-    if (notification.target_post_id) {
-      history.push(`/forum/post/${notification.target_post_id}`);
+    // Tự động đóng toast nếu có
+    notification.destroy(notificationItem.id);
+
+    if (notificationItem.target_post_id) {
+      history.push(`/forum/post/${notificationItem.target_post_id}`);
     }
   };
 
@@ -377,9 +439,13 @@ const PostDetailPage: React.FC = () => {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
+        // Tắt tất cả các toasts đang hiển thị
+        notifications.forEach(n => {
+          notification.destroy(n.id);
+        });
         setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
         setUnreadCount(0);
-        message.success('Đã đánh dấu tất cả thông báo là đã đọc');
+        showSuccess('Đã đánh dấu tất cả thông báo là đã đọc');
       }
     } catch (e) {
       console.error(e);
@@ -387,6 +453,17 @@ const PostDetailPage: React.FC = () => {
   };
 
   useEffect(() => {
+    const pendingToastSuccess = localStorage.getItem('trigger_toast_success');
+    if (pendingToastSuccess) {
+      showSuccess(pendingToastSuccess);
+      localStorage.removeItem('trigger_toast_success');
+    }
+    const pendingToastError = localStorage.getItem('trigger_toast_error');
+    if (pendingToastError) {
+      showError(pendingToastError);
+      localStorage.removeItem('trigger_toast_error');
+    }
+
     const savedUser = localStorage.getItem('user');
     let interval: any;
     if (savedUser) {
@@ -406,6 +483,15 @@ const PostDetailPage: React.FC = () => {
     };
   }, [id]);
 
+  useEffect(() => {
+    if (activeToast) {
+      const timer = setTimeout(() => {
+        setActiveToast(null);
+      }, 3500);
+      return () => clearTimeout(timer);
+    }
+  }, [activeToast]);
+
   const handleLogout = () => {
     localStorage.clear();
     history.push('/auth');
@@ -421,7 +507,7 @@ const PostDetailPage: React.FC = () => {
   const handlePostVote = async (value: number) => {
     const token = localStorage.getItem('access_token');
     if (!token) {
-      message.warning('Vui lòng đăng nhập để vote');
+      showWarning('Vui lòng đăng nhập để vote');
       return;
     }
     try {
@@ -436,16 +522,21 @@ const PostDetailPage: React.FC = () => {
       if (res.ok) {
         const data = await res.json();
         setPost(prev => prev ? { ...prev, score: data.score, user_vote: data.user_vote } : null);
+        if (data.status === 'voted') {
+          showSuccess(value === 1 ? 'Đã bình chọn thích bài viết này thành công!' : 'Đã bình chọn không thích bài viết này.');
+        } else {
+          showSuccess('Đã hủy bỏ lượt bình chọn cho bài viết.');
+        }
       }
     } catch (error) {
-      message.error('Lỗi khi vote bài viết');
+      showError('Lỗi khi vote bài viết');
     }
   };
 
   const handleCommentVote = async (commentId: number, value: number) => {
     const token = localStorage.getItem('access_token');
     if (!token) {
-      message.warning('Vui lòng đăng nhập để vote');
+      showWarning('Vui lòng đăng nhập để vote');
       return;
     }
     try {
@@ -458,22 +549,28 @@ const PostDetailPage: React.FC = () => {
         body: JSON.stringify({ value })
       });
       if (res.ok) {
+        const data = await res.json();
         await fetchComments(); // Reload để cập nhật điểm và trạng thái vote cho cả reply
+        if (data.status === 'voted') {
+          showSuccess(value === 1 ? 'Đã bình chọn câu trả lời này là hữu ích!' : 'Đã bình chọn câu trả lời này không hữu ích.');
+        } else {
+          showSuccess('Đã hủy bỏ lượt bình chọn cho câu trả lời.');
+        }
       }
     } catch (error) {
-      message.error('Lỗi khi vote bình luận');
+      showError('Lỗi khi vote bình luận');
     }
   };
 
   const handleSubmitAnswer = async () => {
     const token = localStorage.getItem('access_token');
     if (!token) {
-      message.warning('Vui lòng đăng nhập để trả lời');
+      showWarning('Vui lòng đăng nhập để trả lời');
       history.push('/auth');
       return;
     }
     if (!answerContent.trim()) {
-      message.warning('Vui lòng nhập nội dung câu trả lời');
+      showWarning('Vui lòng nhập nội dung câu trả lời');
       return;
     }
     setSubmitting(true);
@@ -487,15 +584,15 @@ const PostDetailPage: React.FC = () => {
         body: JSON.stringify({ post: Number(id), content: answerContent })
       });
       if (res.ok) {
-        message.success('Đã đăng câu trả lời!');
+        showSuccess('Đăng câu trả lời thành công! Nội dung phản hồi của bạn đã được hiển thị bên dưới câu hỏi.');
         setAnswerContent('');
         await fetchComments();
       } else {
         const err = await res.json();
-        message.error(err.detail || 'Có lỗi xảy ra');
+        showError(err.detail || 'Có lỗi xảy ra');
       }
     } catch (error) {
-      message.error('Lỗi kết nối server');
+      showError('Lỗi kết nối server');
     } finally {
       setSubmitting(false);
     }
@@ -504,12 +601,12 @@ const PostDetailPage: React.FC = () => {
   const handleSubmitReply = async (parentId: number) => {
     const token = localStorage.getItem('access_token');
     if (!token) {
-      message.warning('Vui lòng đăng nhập để phản hồi');
+      showWarning('Vui lòng đăng nhập để phản hồi');
       history.push('/auth');
       return;
     }
     if (!replyContent.trim()) {
-      message.warning('Vui lòng nhập nội dung phản hồi');
+      showWarning('Vui lòng nhập nội dung phản hồi');
       return;
     }
     setSubmitting(true);
@@ -523,16 +620,16 @@ const PostDetailPage: React.FC = () => {
         body: JSON.stringify({ post: Number(id), content: replyContent, parent: parentId })
       });
       if (res.ok) {
-        message.success('Đã đăng phản hồi!');
+        showSuccess('Đăng phản hồi thành công! Ý kiến của bạn đã được cập nhật thành công.');
         setReplyContent('');
         setReplyingTo(null);
         await fetchComments();
       } else {
         const err = await res.json();
-        message.error(err.detail || 'Có lỗi xảy ra');
+        showError(err.detail || 'Có lỗi xảy ra');
       }
     } catch (error) {
-      message.error('Lỗi kết nối server');
+      showError('Lỗi kết nối server');
     } finally {
       setSubmitting(false);
     }
@@ -547,14 +644,14 @@ const PostDetailPage: React.FC = () => {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
-        message.success('Đã cập nhật trạng thái chấp nhận!');
+        showSuccess('Đã cập nhật trạng thái chấp nhận!');
         await fetchComments();
       } else {
         const err = await res.json();
-        message.error(err.detail || 'Không thể cập nhật');
+        showError(err.detail || 'Không thể cập nhật');
       }
     } catch (error) {
-      message.error('Lỗi kết nối server');
+      showError('Lỗi kết nối server');
     }
   };
 
@@ -848,6 +945,80 @@ const PostDetailPage: React.FC = () => {
             </div>
           </div>
         </Content>
+        {activeToast && (
+          <div 
+            onClick={() => {
+              if (activeToast.type === 'SUCCESS' || activeToast.type === 'ERROR' || activeToast.type === 'WARNING') {
+                setActiveToast(null);
+              } else {
+                handleReadNotification(activeToast);
+                setActiveToast(null);
+              }
+            }}
+            style={{
+              position: 'fixed',
+              bottom: 16,
+              left: 'max(16px, calc(max(0px, (100vw - 1264px) / 2) + 164px - 300px - 16px))',
+              width: 300,
+              background: '#fff',
+              borderRadius: 0,
+              border: '1px solid #e3e6e8',
+              padding: '14px 18px',
+              cursor: 'pointer',
+              zIndex: 9999,
+              display: 'flex',
+              gap: 12,
+              alignItems: 'center'
+            }}
+          >
+            {activeToast.type === 'WELCOME' ? (
+              <Avatar size={42} style={{ backgroundColor: '#f48024', flexShrink: 0 }} icon={<UserOutlined />} />
+            ) : (activeToast.type === 'REPLY_POST' || activeToast.type === 'REPLY_COMMENT') ? (
+              activeToast.actor_name ? (
+                <Avatar size={42} style={{ backgroundColor: '#0074cc', flexShrink: 0, fontWeight: 700, fontSize: 18 }}>
+                  {activeToast.actor_name.charAt(0).toUpperCase()}
+                </Avatar>
+              ) : (
+                <Avatar size={42} style={{ backgroundColor: '#0074cc', flexShrink: 0 }} icon={<UserOutlined />} />
+              )
+            ) : user && user.avatar ? (
+              <Avatar size={42} src={user.avatar} style={{ flexShrink: 0 }} />
+            ) : user && user.username ? (
+              <Avatar size={42} style={{ backgroundColor: '#f48024', flexShrink: 0, fontWeight: 700, fontSize: 18 }}>
+                {user.username.charAt(0).toUpperCase()}
+              </Avatar>
+            ) : (
+              <Avatar size={42} style={{ backgroundColor: '#f48024', flexShrink: 0 }} icon={<UserOutlined />} />
+            )}
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ 
+                fontSize: 14, 
+                fontWeight: 700, 
+                color: activeToast.type === 'SUCCESS' ? '#5eba7d' : 
+                       activeToast.type === 'ERROR' ? '#d12d2d' : '#f48024',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                marginBottom: 2
+              }}>
+                {activeToast.type === 'SUCCESS' ? 'Thành công' :
+                 activeToast.type === 'ERROR' ? 'Thất bại' :
+                 activeToast.type === 'WARNING' ? 'Cảnh báo' : 'Thông báo'}
+              </div>
+              <div style={{ 
+                fontSize: 12.5, 
+                color: '#232629', 
+                lineHeight: 1.4, 
+                display: '-webkit-box', 
+                WebkitLineClamp: 3, 
+                WebkitBoxOrient: 'vertical', 
+                overflow: 'hidden' 
+              }}>
+                {activeToast.message}
+              </div>
+            </div>
+          </div>
+        )}
       </Layout>
     </ConfigProvider>
   );
