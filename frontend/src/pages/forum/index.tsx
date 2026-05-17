@@ -22,7 +22,8 @@ import {
   Badge,
   Tooltip,
   Dropdown,
-  Select
+  Select,
+  Popover
 } from 'antd';
 import type { MenuProps } from 'antd';
 import { 
@@ -81,6 +82,8 @@ const ForumPage: React.FC = () => {
   const [isFocused, setIsFocused] = useState(false);
   const [editorEmpty, setEditorEmpty] = useState(true);
   const [fullSearchText, setFullSearchText] = useState('');
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [unreadCount, setUnreadCount] = useState<number>(0);
 
   const BASE_URL = 'http://localhost:8002';
 
@@ -126,14 +129,85 @@ const ForumPage: React.FC = () => {
     }
   };
 
+  const fetchNotifications = async () => {
+    const token = localStorage.getItem('access_token');
+    if (!token) return;
+    try {
+      const res = await fetch(`${BASE_URL}/api/notifications/`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setNotifications(data);
+        const unread = data.filter((n: any) => !n.is_read).length;
+        setUnreadCount(unread);
+      }
+    } catch (e) {
+      console.error('Lỗi tải thông báo', e);
+    }
+  };
+
+  const handleReadNotification = async (notification: any) => {
+    if (!notification.is_read) {
+      const token = localStorage.getItem('access_token');
+      try {
+        await fetch(`${BASE_URL}/api/notifications/${notification.id}/`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ is_read: true })
+        });
+        setNotifications(prev => 
+          prev.map(n => n.id === notification.id ? { ...n, is_read: true } : n)
+        );
+        setUnreadCount(c => Math.max(0, c - 1));
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    
+    if (notification.target_post_id) {
+      history.push(`/forum/post/${notification.target_post_id}`);
+    }
+  };
+
+  const handleMarkAllAsRead = async () => {
+    const token = localStorage.getItem('access_token');
+    try {
+      const res = await fetch(`${BASE_URL}/api/notifications/mark_all_as_read/`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+        setUnreadCount(0);
+        message.success('Đã đánh dấu tất cả thông báo là đã đọc');
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   useEffect(() => {
     const savedUser = localStorage.getItem('user');
-    if (savedUser) setUser(JSON.parse(savedUser));
+    let interval: any;
+    if (savedUser) {
+      setUser(JSON.parse(savedUser));
+      fetchNotifications();
+      
+      // Kiểm tra thông báo mới mỗi 10 giây
+      interval = setInterval(fetchNotifications, 10000);
+    }
     fetchData();
     fetchTags();
     if (editorRef.current) {
       setEditorTagsAndText(selectedTags, searchQuery);
     }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
   }, []);
 
   const handleCreatePost = async (values: any) => {
@@ -568,6 +642,76 @@ const ForumPage: React.FC = () => {
     </div>
   );
 
+  const notificationContent = (
+    <div style={{ width: 360 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, paddingBottom: 8, borderBottom: '1px solid #f0f0f0' }}>
+        <Text strong style={{ fontSize: 16 }}>Thông báo</Text>
+        {unreadCount > 0 && (
+          <a onClick={handleMarkAllAsRead} style={{ fontSize: 13, color: '#0074cc' }}>
+            Đánh dấu tất cả đã đọc
+          </a>
+        )}
+      </div>
+      <div style={{ maxHeight: 320, overflowY: 'auto' }}>
+        {notifications.length > 0 ? (
+          <List
+            itemLayout="horizontal"
+            dataSource={notifications}
+            renderItem={(item) => (
+              <List.Item
+                onClick={() => handleReadNotification(item)}
+                style={{
+                  cursor: 'pointer',
+                  padding: '10px 12px',
+                  borderRadius: 4,
+                  backgroundColor: item.is_read ? '#fff' : '#f0f8ff',
+                  transition: 'background-color 0.2s',
+                  marginBottom: 4,
+                  border: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12
+                }}
+                className="notification-item"
+              >
+                <Avatar 
+                  style={{ backgroundColor: item.notification_type === 'WELCOME' ? '#f48024' : '#0074cc', flexShrink: 0 }}
+                  icon={<UserOutlined />}
+                />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ 
+                    fontSize: 13, 
+                    color: '#232629', 
+                    lineHeight: 1.4,
+                    fontWeight: item.is_read ? 400 : 500 
+                  }}>
+                    {item.message}
+                  </div>
+                  <div style={{ fontSize: 11, color: '#6a737c', marginTop: 4 }}>
+                    {moment(item.created_at).fromNow()}
+                  </div>
+                </div>
+                {!item.is_read && (
+                  <div style={{ 
+                    width: 8, 
+                    height: 8, 
+                    borderRadius: '50%', 
+                    backgroundColor: '#f48024', 
+                    flexShrink: 0 
+                  }} />
+                )}
+              </List.Item>
+            )}
+          />
+        ) : (
+          <div style={{ padding: '24px 0', textAlign: 'center' }}>
+            <Empty description="Không có thông báo nào" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <ConfigProvider 
       theme={{ 
@@ -657,6 +801,9 @@ const ForumPage: React.FC = () => {
                 .forum-search-tag:hover {
                   background-color: #d0e3f0;
                 }
+                .notification-item:hover {
+                  background-color: #e6f7ff !important;
+                }
               `}</style>
               <div
                 ref={editorRef}
@@ -692,9 +839,17 @@ const ForumPage: React.FC = () => {
             <Space size={20}>
               {user ? (
                 <>
-                  <Badge count={0} size="small">
-                    <Button type="text" icon={<BellOutlined style={{ fontSize: 20, color: '#525960' }} />} />
-                  </Badge>
+                  <Popover
+                    content={notificationContent}
+                    title={null}
+                    trigger="click"
+                    placement="bottomRight"
+                    overlayClassName="notification-popover"
+                  >
+                    <Badge count={unreadCount} size="small" overflowCount={99}>
+                      <Button type="text" icon={<BellOutlined style={{ fontSize: 20, color: '#525960' }} />} />
+                    </Badge>
+                  </Popover>
                   <Dropdown menu={{ items: userMenuItems }} placement="bottomRight" arrow>
                     <Avatar 
                       style={{ backgroundColor: '#f48024', cursor: 'pointer' }} 
