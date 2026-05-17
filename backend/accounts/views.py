@@ -99,3 +99,98 @@ class ResetPasswordView(APIView):
             return Response({"message": "Mật khẩu đã được cập nhật thành công!"}, status=status.HTTP_200_OK)
         else:
             return Response({"error": "Mã xác thực không hợp lệ hoặc đã hết hạn."}, status=status.HTTP_400_BAD_REQUEST)
+
+from rest_framework.permissions import IsAuthenticated
+from .serializers import UserProfileUpdateSerializer
+
+class UserProfileUpdateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        request=UserProfileUpdateSerializer,
+        summary="Cập nhật hồ sơ cá nhân",
+        description="API cập nhật thông tin cá nhân bao gồm họ tên, email, trường học, chuyên ngành, avatar và đổi mật khẩu."
+    )
+    def patch(self, request):
+        serializer = UserProfileUpdateSerializer(request.user, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            # Trả về thông tin user mới cập nhật
+            user = request.user
+            avatar_url = request.build_absolute_uri(user.avatar.url) if user.avatar else None
+            return Response({
+                "success": True,
+                "message": "Cập nhật hồ sơ cá nhân thành công!",
+                "user": {
+                    "id": user.id,
+                    "username": user.username,
+                    "email": user.email,
+                    "full_name": user.full_name,
+                    "role": user.role,
+                    "university": user.university,
+                    "major": user.major,
+                    "is_verified": user.is_verified,
+                    "is_verified_lecturer": user.is_verified_lecturer,
+                    "avatar": avatar_url
+                }
+            }, status=status.HTTP_200_OK)
+        
+        return Response({
+            "success": False,
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+class UnverifiedLecturersListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        summary="Danh sách giảng viên chờ duyệt (Admin)",
+        description="Lấy danh sách các giảng viên đăng ký nhưng chưa được xác thực."
+    )
+    def get(self, request):
+        if request.user.role != 'ADMIN':
+            return Response({"error": "Chỉ Admin mới có quyền truy cập chức năng này."}, status=status.HTTP_403_FORBIDDEN)
+        
+        unverified_lecturers = User.objects.filter(role='LECTURER', is_verified=False)
+        data = []
+        for lecturer in unverified_lecturers:
+            evidence_url = request.build_absolute_uri(lecturer.evidence_img.url) if lecturer.evidence_img else None
+            avatar_url = request.build_absolute_uri(lecturer.avatar.url) if lecturer.avatar else None
+            data.append({
+                "id": lecturer.id,
+                "username": lecturer.username,
+                "email": lecturer.email,
+                "full_name": lecturer.full_name,
+                "university": lecturer.university,
+                "major": lecturer.major,
+                "profile_url": lecturer.profile_url,
+                "evidence_img": evidence_url,
+                "avatar": avatar_url,
+                "date_joined": lecturer.date_joined
+            })
+        return Response(data, status=status.HTTP_200_OK)
+
+class VerifyLecturerView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        summary="Duyệt giảng viên (Admin)",
+        description="Phê duyệt một tài khoản giảng viên thành công."
+    )
+    def post(self, request, pk):
+        if request.user.role != 'ADMIN':
+            return Response({"error": "Chỉ Admin mới có quyền truy cập chức năng này."}, status=status.HTTP_403_FORBIDDEN)
+        
+        try:
+            lecturer = User.objects.get(pk=pk, role='LECTURER')
+        except User.DoesNotExist:
+            return Response({"error": "Không tìm thấy giảng viên yêu cầu."}, status=status.HTTP_404_NOT_FOUND)
+        
+        lecturer.is_verified = True
+        lecturer.is_verified_lecturer = True
+        lecturer.save()
+        
+        return Response({
+            "success": True,
+            "message": f"Đã phê duyệt thành công giảng viên {lecturer.full_name or lecturer.username}!"
+        }, status=status.HTTP_200_OK)
