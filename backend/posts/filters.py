@@ -1,9 +1,12 @@
 import django_filters
 from .models import Post
 
+class CharInFilter(django_filters.BaseInFilter, django_filters.CharFilter):
+    pass
+
 class PostFilter(django_filters.FilterSet):
-    # Lọc bài viết theo slug của tag (Ví dụ: ?tag=lap-trinh)
-    tag = django_filters.CharFilter(field_name='tags__slug')
+    # Lọc bài viết theo danh sách slug của tag (Ví dụ: ?tag=python,django)
+    tag = CharInFilter(field_name='tags__slug', lookup_expr='in')
     
     # Lọc bài viết chưa có câu trả lời (comment)
     # ?unanswered=true

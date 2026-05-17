@@ -21,7 +21,8 @@ import {
   Empty,
   Badge,
   Tooltip,
-  Dropdown
+  Dropdown,
+  Select
 } from 'antd';
 import type { MenuProps } from 'antd';
 import { 
@@ -72,10 +73,14 @@ const ForumPage: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [form] = Form.useForm();
   const [user, setUser] = useState<any>(null);
-  const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [ordering, setOrdering] = useState('-created_at');
   const [unanswered, setUnanswered] = useState(false);
+  const editorRef = React.useRef<HTMLDivElement>(null);
+  const [isFocused, setIsFocused] = useState(false);
+  const [editorEmpty, setEditorEmpty] = useState(true);
+  const [fullSearchText, setFullSearchText] = useState('');
 
   const BASE_URL = 'http://localhost:8002';
 
@@ -83,22 +88,27 @@ const ForumPage: React.FC = () => {
     setLoading(true);
     try {
       const { 
-        tag = selectedTag, 
-        search = searchQuery, 
+        tag: tagsFromParam, 
+        search: searchFromParam, 
         ordering: ord = ordering, 
         unanswered: unans = unanswered 
       } = params;
 
+      // Ưu tiên dùng dữ liệu truyền trực tiếp vào hàm, nếu không có mới dùng state
+      const currentTags = tagsFromParam !== undefined ? (tagsFromParam ? tagsFromParam.split(',') : []) : selectedTags;
+      const currentSearch = searchFromParam !== undefined ? searchFromParam : searchQuery;
+
       const queryParams = new URLSearchParams();
-      if (tag) queryParams.append('tag', tag);
-      if (search) queryParams.append('search', search);
+      if (currentTags.length > 0) queryParams.append('tag', currentTags.join(','));
+      if (currentSearch) queryParams.append('search', currentSearch);
       if (ord) queryParams.append('ordering', ord);
       if (unans) queryParams.append('unanswered', 'true');
 
       const url = `${BASE_URL}/api/posts/?${queryParams.toString()}`;
       const res = await fetch(url);
       const data = await res.json();
-      setPosts(data);
+      // Đảm bảo tương thích cả khi Backend có phân trang hoặc không
+      setPosts(data.results || (Array.isArray(data) ? data : []));
     } catch (error) {
       message.error('Không thể tải bài viết');
     } finally {
@@ -121,6 +131,9 @@ const ForumPage: React.FC = () => {
     if (savedUser) setUser(JSON.parse(savedUser));
     fetchData();
     fetchTags();
+    if (editorRef.current) {
+      setEditorTagsAndText(selectedTags, searchQuery);
+    }
   }, []);
 
   const handleCreatePost = async (values: any) => {
@@ -168,15 +181,304 @@ const ForumPage: React.FC = () => {
     history.push('/auth');
   };
 
-  const filterByTag = (tagName: string | null) => {
-    setSelectedTag(tagName);
-    fetchData({ tag: tagName || undefined });
+  const checkIsEditorEmpty = () => {
+    if (!editorRef.current) return true;
+    const hasTags = editorRef.current.querySelector('.forum-search-tag') !== null;
+    const text = editorRef.current.textContent || '';
+    return !hasTags && text.trim() === '';
   };
 
-  const handleSearch = (value: string) => {
-    setSearchQuery(value);
-    fetchData({ search: value });
+  const setEditorTagsAndText = (tags: string[], text: string) => {
+    if (!editorRef.current) return;
+    
+    editorRef.current.innerHTML = '';
+    
+    tags.forEach(tag => {
+      const tagEl = document.createElement('span');
+      tagEl.className = 'forum-search-tag';
+      tagEl.setAttribute('contenteditable', 'false');
+      tagEl.textContent = `#${tag}`;
+      
+      tagEl.oncontextmenu = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        
+        const plainTextNode = document.createTextNode(`#${tag}`);
+        tagEl.parentNode?.replaceChild(plainTextNode, tagEl);
+        
+        const newRange = document.createRange();
+        newRange.setStart(plainTextNode, plainTextNode.length);
+        newRange.setEnd(plainTextNode, plainTextNode.length);
+        const newSel = window.getSelection();
+        newSel?.removeAllRanges();
+        newSel?.addRange(newRange);
+        
+        setEditorEmpty(checkIsEditorEmpty());
+      };
+      
+      editorRef.current?.appendChild(tagEl);
+      editorRef.current?.appendChild(document.createTextNode(' '));
+    });
+    
+    if (text) {
+      editorRef.current.appendChild(document.createTextNode(text));
+    }
+    
+    setEditorEmpty(tags.length === 0 && !text);
   };
+
+  const packageLooseHashtagsInPlace = (container: HTMLDivElement | null) => {
+    if (!container) return;
+    const hashtagRegex = /(?<=^|\s)#([^\s#]+)(?=$|\s)/g;
+    const textNodes: Text[] = [];
+    const walk = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null);
+    let node: Node | null;
+    while (node = walk.nextNode()) {
+      if (node.parentNode && (node.parentNode as HTMLElement).classList.contains('forum-search-tag')) {
+        continue;
+      }
+      textNodes.push(node as Text);
+    }
+    
+    textNodes.forEach(textNode => {
+      const text = textNode.nodeValue || '';
+      const matches = [...text.matchAll(hashtagRegex)];
+      if (matches.length === 0) return;
+      
+      const parent = textNode.parentNode;
+      if (!parent) return;
+      
+      let lastIdx = 0;
+      const fragment = document.createDocumentFragment();
+      
+      matches.forEach(match => {
+        const matchIdx = match.index || 0;
+        if (matchIdx > lastIdx) {
+          fragment.appendChild(document.createTextNode(text.substring(lastIdx, matchIdx)));
+        }
+        
+        const tagText = match[1];
+        const tagEl = document.createElement('span');
+        tagEl.className = 'forum-search-tag';
+        tagEl.setAttribute('contenteditable', 'false');
+        tagEl.textContent = `#${tagText}`;
+        
+        tagEl.oncontextmenu = (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          
+          const plainTextNode = document.createTextNode(`#${tagText}`);
+          tagEl.parentNode?.replaceChild(plainTextNode, tagEl);
+          
+          const newRange = document.createRange();
+          newRange.setStart(plainTextNode, plainTextNode.length);
+          newRange.setEnd(plainTextNode, plainTextNode.length);
+          const newSel = window.getSelection();
+          newSel?.removeAllRanges();
+          newSel?.addRange(newRange);
+          
+          setEditorEmpty(checkIsEditorEmpty());
+        };
+        
+        fragment.appendChild(tagEl);
+        lastIdx = matchIdx + match[0].length;
+      });
+      
+      if (lastIdx < text.length) {
+        fragment.appendChild(document.createTextNode(text.substring(lastIdx)));
+      }
+      
+      parent.replaceChild(fragment, textNode);
+    });
+  };
+
+  const parseContentEditableDOM = (container: HTMLDivElement | null) => {
+    if (!container) return { tags: [], keywords: '' };
+    
+    const tags: string[] = [];
+    let textParts: string[] = [];
+    
+    container.childNodes.forEach(node => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        textParts.push(node.nodeValue || '');
+      } else if (node.nodeType === Node.ELEMENT_NODE) {
+        const el = node as HTMLElement;
+        if (el.classList.contains('forum-search-tag')) {
+          const tagText = el.textContent || '';
+          tags.push(tagText.replace('#', '').toLowerCase());
+        } else {
+          textParts.push(el.textContent || '');
+        }
+      }
+    });
+    
+    const keywords = textParts.join('').replace(/\s+/g, ' ').trim();
+    return { 
+      tags: Array.from(new Set(tags)), 
+      keywords 
+    };
+  };
+
+  const getFullSearchText = (container: HTMLDivElement | null) => {
+    if (!container) return '';
+    let parts: string[] = [];
+    container.childNodes.forEach(node => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        parts.push(node.nodeValue || '');
+      } else if (node.nodeType === Node.ELEMENT_NODE) {
+        const el = node as HTMLElement;
+        if (el.classList.contains('forum-search-tag')) {
+          parts.push((el.textContent || '').toLowerCase());
+        } else {
+          parts.push(el.textContent || '');
+        }
+      }
+    });
+    return parts.join('').replace(/\s+/g, ' ').trim();
+  };
+
+  const filterByTag = (tagName: string | null) => {
+    if (tagName) {
+      const lowerTagName = tagName.toLowerCase();
+      setSelectedTags([lowerTagName]);
+      setSearchQuery('');
+      setFullSearchText(`#${lowerTagName}`);
+      setEditorTagsAndText([lowerTagName], '');
+      fetchData({ tag: lowerTagName, search: '' });
+    } else {
+      setSelectedTags([]);
+      setSearchQuery('');
+      setFullSearchText('');
+      setEditorTagsAndText([], '');
+      fetchData({ tag: undefined, search: '' });
+    }
+  };
+
+  const handleEditorInput = (e: React.FormEvent<HTMLDivElement>) => {
+    const selection = window.getSelection();
+    if (!selection || !selection.focusNode) {
+      setEditorEmpty(checkIsEditorEmpty());
+      return;
+    }
+    
+    const node = selection.focusNode;
+    if (node.nodeType !== Node.TEXT_NODE) {
+      setEditorEmpty(checkIsEditorEmpty());
+      return;
+    }
+    
+    const text = node.nodeValue || '';
+    const offset = selection.focusOffset;
+    
+    const textBeforeCaret = text.substring(0, offset);
+    const hashtagMatch = textBeforeCaret.match(/(?:^|\s)#([^\s#]+)\s$/);
+    
+    if (hashtagMatch) {
+      const fullMatch = hashtagMatch[0];
+      const tagText = hashtagMatch[1];
+      
+      const hasLeadingSpace = fullMatch.startsWith(' ');
+      const keepText = textBeforeCaret.substring(0, textBeforeCaret.length - fullMatch.length) + (hasLeadingSpace ? ' ' : '');
+      
+      const afterText = text.substring(offset);
+      node.nodeValue = keepText;
+      
+      const tagEl = document.createElement('span');
+      tagEl.className = 'forum-search-tag';
+      tagEl.setAttribute('contenteditable', 'false');
+      tagEl.textContent = `#${tagText}`;
+      
+      tagEl.oncontextmenu = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        
+        const plainTextNode = document.createTextNode(`#${tagText}`);
+        tagEl.parentNode?.replaceChild(plainTextNode, tagEl);
+        
+        const newRange = document.createRange();
+        newRange.setStart(plainTextNode, plainTextNode.length);
+        newRange.setEnd(plainTextNode, plainTextNode.length);
+        const newSel = window.getSelection();
+        newSel?.removeAllRanges();
+        newSel?.addRange(newRange);
+        
+        setEditorEmpty(checkIsEditorEmpty());
+      };
+      
+      const trailingSpaceNode = document.createTextNode(' ' + afterText);
+      const parent = node.parentNode;
+      
+      if (parent) {
+        if (node.nextSibling) {
+          parent.insertBefore(tagEl, node.nextSibling);
+          parent.insertBefore(trailingSpaceNode, tagEl.nextSibling);
+        } else {
+          parent.appendChild(tagEl);
+          parent.appendChild(trailingSpaceNode);
+        }
+        
+        const range = document.createRange();
+        range.setStart(trailingSpaceNode, 1);
+        range.setEnd(trailingSpaceNode, 1);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
+    }
+    
+    setEditorEmpty(checkIsEditorEmpty());
+  };
+
+  const handleEditorKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      executeSearch();
+      return;
+    }
+    
+    if (e.key === 'Backspace') {
+      const selection = window.getSelection();
+      if (selection && selection.focusNode) {
+        const node = selection.focusNode;
+        const offset = selection.focusOffset;
+        
+        if (node.nodeType === Node.TEXT_NODE && offset === 0) {
+          const prevSibling = node.previousSibling as HTMLElement;
+          if (prevSibling && prevSibling.classList && prevSibling.classList.contains('forum-search-tag')) {
+            e.preventDefault();
+            prevSibling.parentNode?.removeChild(prevSibling);
+            
+            setTimeout(() => {
+              setEditorEmpty(checkIsEditorEmpty());
+            }, 0);
+            return;
+          }
+        }
+      }
+    }
+    
+    setTimeout(() => {
+      setEditorEmpty(checkIsEditorEmpty());
+    }, 0);
+  };
+
+  const executeSearch = () => {
+    packageLooseHashtagsInPlace(editorRef.current);
+    
+    const { tags, keywords } = parseContentEditableDOM(editorRef.current);
+    
+    setSearchQuery(keywords);
+    setSelectedTags(tags);
+    setFullSearchText(getFullSearchText(editorRef.current));
+    
+    if (editorRef.current) {
+      editorRef.current.blur();
+    }
+    
+    setEditorEmpty(checkIsEditorEmpty());
+    fetchData({ tag: tags.join(','), search: keywords });
+  };
+
+
 
   const handleOrderingChange = (newOrdering: string) => {
     setOrdering(newOrdering);
@@ -299,17 +601,91 @@ const ForumPage: React.FC = () => {
               <span>edu<Text strong style={{ color: '#f48024' }}>forum</Text></span>
             </div>
 
-            <div style={{ flex: 1, padding: '0 24px 0 0' }}>
-              <Input.Search 
-                placeholder="Tìm kiếm câu hỏi..." 
-                onSearch={handleSearch}
-                allowClear
-                style={{ borderRadius: 3 }}
-                enterButton={
-                  <Button type="primary" style={{ backgroundColor: '#f48024', borderColor: '#f48024' }}>
-                    <SearchOutlined />
-                  </Button>
+            <div style={{ flex: 1, padding: '0 24px 0 0', display: 'flex', alignItems: 'center' }}>
+              <style>{`
+                .forum-search-editor {
+                  position: relative;
+                  border: 1px solid #d9d9d9;
+                  border-radius: 3px 0 0 3px;
+                  padding: 4px 11px;
+                  height: 32px;
+                  box-sizing: border-box;
+                  white-space: nowrap;
+                  overflow-x: auto;
+                  overflow-y: hidden;
+                  outline: none;
+                  background-color: #fff;
+                  flex: 1;
+                  min-width: 0;
+                  width: 0;
+                  cursor: text;
+                  font-size: 14px;
+                  line-height: 22px;
+                  transition: all 0.3s;
+                  -ms-overflow-style: none;  /* IE and Edge */
+                  scrollbar-width: none;  /* Firefox */
                 }
+                .forum-search-editor::-webkit-scrollbar {
+                  display: none; /* Chrome, Safari and Opera */
+                }
+                .forum-search-editor:hover {
+                  border-color: #f48024;
+                }
+                .forum-search-editor:focus {
+                  border-color: #f48024;
+                  box-shadow: 0 0 0 2px rgba(244, 128, 36, 0.2);
+                }
+                .forum-search-editor.show-placeholder:before {
+                  content: attr(placeholder);
+                  color: #bfbfbf;
+                  cursor: text;
+                  pointer-events: none;
+                  position: absolute;
+                  left: 11px;
+                  top: 4px;
+                }
+                .forum-search-tag {
+                  background-color: #e1ecf4;
+                  color: #39739d;
+                  border-radius: 2px;
+                  padding: 0 6px;
+                  margin: 0 2px;
+                  display: inline-block;
+                  font-weight: 500;
+                  user-select: none;
+                }
+                .forum-search-tag:hover {
+                  background-color: #d0e3f0;
+                }
+              `}</style>
+              <div
+                ref={editorRef}
+                className={`forum-search-editor ${editorEmpty ? 'show-placeholder' : ''}`}
+                contentEditable
+                onInput={handleEditorInput}
+                onKeyDown={handleEditorKeyDown}
+                onFocus={() => setIsFocused(true)}
+                onBlur={() => setIsFocused(false)}
+                placeholder="Tìm kiếm... (Sử dụng #tag để lọc theo thẻ)"
+                style={{
+                  borderColor: isFocused ? '#f48024' : '#d9d9d9',
+                  boxShadow: isFocused ? '0 0 0 2px rgba(244, 128, 36, 0.2)' : 'none',
+                }}
+              />
+              <Button 
+                type="primary" 
+                icon={<SearchOutlined />} 
+                onClick={executeSearch}
+                style={{ 
+                  backgroundColor: '#f48024', 
+                  borderColor: '#f48024', 
+                  borderTopLeftRadius: 0, 
+                  borderBottomLeftRadius: 0,
+                  height: 32,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
               />
             </div>
 
@@ -354,19 +730,47 @@ const ForumPage: React.FC = () => {
           </Sider>
 
           <Content style={{ padding: '24px', marginLeft: 164, minHeight: 280, background: '#fff' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-              <Title level={2} style={{ margin: 0, fontWeight: 400 }}>
-                {selectedTag ? `Câu hỏi gắn thẻ [${selectedTag}]` : 'Tất cả câu hỏi'}
-              </Title>
-              <Button 
-                type="primary" 
-                size="large" 
-                icon={<PlusOutlined />} 
-                onClick={() => setIsModalOpen(true)}
-                style={{ boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.4)' }}
-              >
-                Đặt câu hỏi
-              </Button>
+            <div style={{ marginBottom: 24 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Title level={2} style={{ margin: 0, fontWeight: 400 }}>
+                  {fullSearchText ? (
+                    <>
+                      Kết quả cho: <span style={{ fontWeight: 600 }}>"{fullSearchText.length > 50 ? fullSearchText.substring(0, 50) + '...' : fullSearchText}"</span>
+                    </>
+                  ) : (
+                    'Tất cả câu hỏi'
+                  )}
+                </Title>
+                <Button 
+                  type="primary" 
+                  size="large" 
+                  icon={<PlusOutlined />} 
+                  onClick={() => setIsModalOpen(true)}
+                  style={{ boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.4)' }}
+                >
+                  Đặt câu hỏi
+                </Button>
+              </div>
+              {selectedTags.length > 0 && (
+                <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {selectedTags.map(tag => (
+                    <Tag 
+                      key={tag} 
+                      color="#e1ecf4" 
+                      style={{ 
+                        border: 'none', 
+                        color: '#39739d', 
+                        fontWeight: 500, 
+                        padding: '2px 8px', 
+                        borderRadius: '3px',
+                        fontSize: '13px'
+                      }}
+                    >
+                      #{tag}
+                    </Tag>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
