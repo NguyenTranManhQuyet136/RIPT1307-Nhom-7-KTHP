@@ -290,6 +290,7 @@ const PostDetailPage: React.FC = () => {
   const [replyContent, setReplyContent] = useState('');
   const [notifications, setNotifications] = useState<any[]>([]);
   const [unreadCount, setUnreadCount] = useState<number>(0);
+  const [notificationLimit, setNotificationLimit] = useState<number>(10);
   const notifiedIdsRef = React.useRef<Set<number>>(new Set());
   const isFirstLoadRef = React.useRef(true);
   const [activeToast, setActiveToast] = useState<{ id: any; type: string; message: string; target_post_id?: any } | null>(null);
@@ -690,62 +691,78 @@ const PostDetailPage: React.FC = () => {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, paddingBottom: 8, borderBottom: '1px solid #f0f0f0' }}>
         <Text strong style={{ fontSize: 16 }}>Thông báo</Text>
         {unreadCount > 0 && (
-          <a onClick={handleMarkAllAsRead} style={{ fontSize: 13, color: '#0074cc' }}>
+          <a onClick={handleMarkAllAsRead} className="notification-action-link">
             Đánh dấu tất cả đã đọc
           </a>
         )}
       </div>
       <div style={{ maxHeight: 320, overflowY: 'auto' }}>
         {notifications.length > 0 ? (
-          <List
-            itemLayout="horizontal"
-            dataSource={notifications}
-            renderItem={(item) => (
-              <List.Item
-                onClick={() => handleReadNotification(item)}
-                style={{
-                  cursor: 'pointer',
-                  padding: '10px 12px',
-                  borderRadius: 4,
-                  backgroundColor: item.is_read ? '#fff' : '#f0f8ff',
-                  transition: 'background-color 0.2s',
-                  marginBottom: 4,
-                  border: 'none',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 12
-                }}
-                className="notification-item"
-              >
-                <Avatar 
-                  style={{ backgroundColor: item.notification_type === 'WELCOME' ? '#f48024' : '#0074cc', flexShrink: 0 }}
-                  icon={<UserOutlined />}
-                />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ 
-                    fontSize: 13, 
-                    color: '#232629', 
-                    lineHeight: 1.4,
-                    fontWeight: item.is_read ? 400 : 500 
-                  }}>
-                    {item.message}
+          <>
+            <List
+              itemLayout="horizontal"
+              dataSource={notifications.slice(0, notificationLimit)}
+              renderItem={(item) => (
+                <List.Item
+                  onClick={() => handleReadNotification(item)}
+                  style={{
+                    cursor: 'pointer',
+                    padding: '10px 12px',
+                    borderRadius: 4,
+                    backgroundColor: item.is_read ? '#fff' : '#f0f8ff',
+                    transition: 'background-color 0.2s',
+                    marginBottom: 4,
+                    border: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12
+                  }}
+                  className="notification-item"
+                >
+                  <Avatar 
+                    style={{ backgroundColor: item.notification_type === 'WELCOME' ? '#f48024' : '#0074cc', flexShrink: 0 }}
+                    icon={<UserOutlined />}
+                  />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ 
+                      fontSize: 13, 
+                      color: '#232629', 
+                      lineHeight: 1.4,
+                      fontWeight: item.is_read ? 400 : 500 
+                    }}>
+                      {item.message}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#6a737c', marginTop: 4 }}>
+                      {moment(item.created_at).fromNow()}
+                    </div>
                   </div>
-                  <div style={{ fontSize: 11, color: '#6a737c', marginTop: 4 }}>
-                    {moment(item.created_at).fromNow()}
-                  </div>
-                </div>
-                {!item.is_read && (
-                  <div style={{ 
-                    width: 8, 
-                    height: 8, 
-                    borderRadius: '50%', 
-                    backgroundColor: '#f48024', 
-                    flexShrink: 0 
-                  }} />
-                )}
-              </List.Item>
+                  {!item.is_read && (
+                    <div style={{ 
+                      width: 8, 
+                      height: 8, 
+                      borderRadius: '50%', 
+                      backgroundColor: '#f48024', 
+                      flexShrink: 0 
+                    }} />
+                  )}
+                </List.Item>
+              )}
+            />
+            {notifications.length > notificationLimit && (
+              <div style={{ textAlign: 'center', padding: '4px 0', borderTop: '1px solid #f0f0f0', marginTop: 4 }}>
+                <Button 
+                  type="text" 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setNotificationLimit(prev => prev + 10);
+                  }}
+                  className="notification-more-btn"
+                >
+                  Xem thêm
+                </Button>
+              </div>
             )}
-          />
+          </>
         ) : (
           <div style={{ padding: '24px 0', textAlign: 'center' }}>
             <Empty description="Không có thông báo nào" image={Empty.PRESENTED_IMAGE_SIMPLE} />
@@ -783,6 +800,30 @@ const PostDetailPage: React.FC = () => {
             .notification-item:hover {
               background-color: #e6f7ff !important;
             }
+            .notification-action-link {
+              color: #f48024 !important;
+              font-size: 13px;
+              transition: color 0.2s;
+            }
+            .notification-action-link:hover {
+              color: #e06d0f !important;
+            }
+            .notification-more-btn {
+              color: #f48024 !important;
+              font-weight: 500;
+              font-size: 13px;
+              width: 100%;
+              padding: 4px 0;
+              transition: all 0.2s;
+            }
+            .notification-more-btn:hover {
+              color: #e06d0f !important;
+              background-color: #fdf6f0 !important;
+            }
+            .ant-popover, .ant-popover-content {
+              transition: none !important;
+              animation: none !important;
+            }
           `}</style>
           <div style={{ display: 'flex', alignItems: 'center', width: '100%', maxWidth: 1100, margin: '0 auto', padding: '0 24px' }}>
             <div
@@ -806,8 +847,11 @@ const PostDetailPage: React.FC = () => {
                     content={notificationContent}
                     title={null}
                     trigger="click"
-                    placement="bottomRight"
+                    placement="bottom"
                     overlayClassName="notification-popover"
+                    transitionName=""
+                    motion={{ motionName: '' }}
+                    getPopupContainer={(triggerNode) => triggerNode.parentElement || document.body}
                   >
                     <Badge count={unreadCount} size="small" overflowCount={99}>
                       <Button type="text" icon={<BellOutlined style={{ fontSize: 20, color: '#525960' }} />} />
