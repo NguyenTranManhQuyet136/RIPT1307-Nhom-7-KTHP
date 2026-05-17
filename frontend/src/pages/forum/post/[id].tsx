@@ -8,13 +8,16 @@ import {
   Typography,
   Avatar,
   message,
+  notification,
   ConfigProvider,
   theme,
   Badge,
   Tooltip,
   Dropdown,
   Spin,
-  Empty
+  Empty,
+  Popover,
+  List
 } from 'antd';
 import type { MenuProps } from 'antd';
 import {
@@ -31,7 +34,9 @@ import {
   CaretDownOutlined,
   MessageOutlined,
   ClockCircleOutlined,
-  CheckOutlined
+  CheckOutlined,
+  CloseCircleFilled,
+  ExclamationCircleFilled
 } from '@ant-design/icons';
 import { history, useParams } from 'umi';
 import moment from 'moment';
@@ -283,6 +288,36 @@ const PostDetailPage: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [replyingTo, setReplyingTo] = useState<number | null>(null);
   const [replyContent, setReplyContent] = useState('');
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [unreadCount, setUnreadCount] = useState<number>(0);
+  const [notificationLimit, setNotificationLimit] = useState<number>(10);
+  const notifiedIdsRef = React.useRef<Set<number>>(new Set());
+  const isFirstLoadRef = React.useRef(true);
+  const [activeToast, setActiveToast] = useState<{ id: any; type: string; message: string; target_post_id?: any } | null>(null);
+
+  const showSuccess = (msg: string) => {
+    setActiveToast({
+      id: Date.now(),
+      type: 'SUCCESS',
+      message: msg
+    });
+  };
+
+  const showError = (msg: string) => {
+    setActiveToast({
+      id: Date.now(),
+      type: 'ERROR',
+      message: msg
+    });
+  };
+
+  const showWarning = (msg: string) => {
+    setActiveToast({
+      id: Date.now(),
+      type: 'WARNING',
+      message: msg
+    });
+  };
 
   const BASE_URL = 'http://localhost:8002';
 
@@ -297,11 +332,11 @@ const PostDetailPage: React.FC = () => {
         const data = await res.json();
         setPost(data);
       } else {
-        message.error('Không tìm thấy bài viết');
+        showError('Không tìm thấy bài viết');
         history.push('/forum');
       }
     } catch (error) {
-      message.error('Lỗi kết nối server');
+      showError('Lỗi kết nối server');
     }
   };
 
@@ -321,9 +356,122 @@ const PostDetailPage: React.FC = () => {
     }
   };
 
+  const triggerRealtimeToast = (item: any) => {
+    setActiveToast({
+      id: item.id,
+      type: item.notification_type,
+      message: item.message,
+      target_post_id: item.target_post_id,
+      actor_name: item.actor_name
+    });
+  };
+
+  const fetchNotifications = async () => {
+    const token = localStorage.getItem('access_token');
+    if (!token) return;
+    try {
+      const res = await fetch(`${BASE_URL}/api/notifications/`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setNotifications(data);
+        const unread = data.filter((n: any) => !n.is_read).length;
+        setUnreadCount(unread);
+
+        // Phát hiện và hiển thị Toast kiểu Facebook cho thông báo mới
+        data.forEach((item: any) => {
+          if (!item.is_read && !notifiedIdsRef.current.has(item.id)) {
+            notifiedIdsRef.current.add(item.id);
+            if (!isFirstLoadRef.current) {
+              triggerRealtimeToast(item);
+            }
+          }
+        });
+
+        if (isFirstLoadRef.current) {
+          data.forEach((item: any) => {
+            if (!item.is_read) {
+              notifiedIdsRef.current.add(item.id);
+            }
+          });
+          isFirstLoadRef.current = false;
+        }
+      }
+    } catch (e) {
+      console.error('Lỗi tải thông báo', e);
+    }
+  };
+
+  const handleReadNotification = async (notificationItem: any) => {
+    if (!notificationItem.is_read) {
+      const token = localStorage.getItem('access_token');
+      try {
+        await fetch(`${BASE_URL}/api/notifications/${notificationItem.id}/`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ is_read: true })
+        });
+        setNotifications(prev => 
+          prev.map(n => n.id === notificationItem.id ? { ...n, is_read: true } : n)
+        );
+        setUnreadCount(c => Math.max(0, c - 1));
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    
+    // Tự động đóng toast nếu có
+    notification.destroy(notificationItem.id);
+
+    if (notificationItem.target_post_id) {
+      history.push(`/forum/post/${notificationItem.target_post_id}`);
+    }
+  };
+
+  const handleMarkAllAsRead = async () => {
+    const token = localStorage.getItem('access_token');
+    try {
+      const res = await fetch(`${BASE_URL}/api/notifications/mark_all_as_read/`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        // Tắt tất cả các toasts đang hiển thị
+        notifications.forEach(n => {
+          notification.destroy(n.id);
+        });
+        setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+        setUnreadCount(0);
+        showSuccess('Đã đánh dấu tất cả thông báo là đã đọc');
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   useEffect(() => {
+    const pendingToastSuccess = localStorage.getItem('trigger_toast_success');
+    if (pendingToastSuccess) {
+      showSuccess(pendingToastSuccess);
+      localStorage.removeItem('trigger_toast_success');
+    }
+    const pendingToastError = localStorage.getItem('trigger_toast_error');
+    if (pendingToastError) {
+      showError(pendingToastError);
+      localStorage.removeItem('trigger_toast_error');
+    }
+
     const savedUser = localStorage.getItem('user');
-    if (savedUser) setUser(JSON.parse(savedUser));
+    let interval: any;
+    if (savedUser) {
+      setUser(JSON.parse(savedUser));
+      fetchNotifications();
+      interval = setInterval(fetchNotifications, 10000);
+    }
     const loadData = async () => {
       setLoading(true);
       await fetchPost();
@@ -331,7 +479,19 @@ const PostDetailPage: React.FC = () => {
       setLoading(false);
     };
     loadData();
+    return () => {
+      if (interval) clearInterval(interval);
+    };
   }, [id]);
+
+  useEffect(() => {
+    if (activeToast) {
+      const timer = setTimeout(() => {
+        setActiveToast(null);
+      }, 3500);
+      return () => clearTimeout(timer);
+    }
+  }, [activeToast]);
 
   const handleLogout = () => {
     localStorage.clear();
@@ -348,7 +508,7 @@ const PostDetailPage: React.FC = () => {
   const handlePostVote = async (value: number) => {
     const token = localStorage.getItem('access_token');
     if (!token) {
-      message.warning('Vui lòng đăng nhập để vote');
+      showWarning('Vui lòng đăng nhập để vote');
       return;
     }
     try {
@@ -363,16 +523,21 @@ const PostDetailPage: React.FC = () => {
       if (res.ok) {
         const data = await res.json();
         setPost(prev => prev ? { ...prev, score: data.score, user_vote: data.user_vote } : null);
+        if (data.status === 'voted') {
+          showSuccess(value === 1 ? 'Đã bình chọn thích bài viết này thành công!' : 'Đã bình chọn không thích bài viết này.');
+        } else {
+          showSuccess('Đã hủy bỏ lượt bình chọn cho bài viết.');
+        }
       }
     } catch (error) {
-      message.error('Lỗi khi vote bài viết');
+      showError('Lỗi khi vote bài viết');
     }
   };
 
   const handleCommentVote = async (commentId: number, value: number) => {
     const token = localStorage.getItem('access_token');
     if (!token) {
-      message.warning('Vui lòng đăng nhập để vote');
+      showWarning('Vui lòng đăng nhập để vote');
       return;
     }
     try {
@@ -385,22 +550,28 @@ const PostDetailPage: React.FC = () => {
         body: JSON.stringify({ value })
       });
       if (res.ok) {
+        const data = await res.json();
         await fetchComments(); // Reload để cập nhật điểm và trạng thái vote cho cả reply
+        if (data.status === 'voted') {
+          showSuccess(value === 1 ? 'Đã bình chọn câu trả lời này là hữu ích!' : 'Đã bình chọn câu trả lời này không hữu ích.');
+        } else {
+          showSuccess('Đã hủy bỏ lượt bình chọn cho câu trả lời.');
+        }
       }
     } catch (error) {
-      message.error('Lỗi khi vote bình luận');
+      showError('Lỗi khi vote bình luận');
     }
   };
 
   const handleSubmitAnswer = async () => {
     const token = localStorage.getItem('access_token');
     if (!token) {
-      message.warning('Vui lòng đăng nhập để trả lời');
+      showWarning('Vui lòng đăng nhập để trả lời');
       history.push('/auth');
       return;
     }
     if (!answerContent.trim()) {
-      message.warning('Vui lòng nhập nội dung câu trả lời');
+      showWarning('Vui lòng nhập nội dung câu trả lời');
       return;
     }
     setSubmitting(true);
@@ -414,15 +585,15 @@ const PostDetailPage: React.FC = () => {
         body: JSON.stringify({ post: Number(id), content: answerContent })
       });
       if (res.ok) {
-        message.success('Đã đăng câu trả lời!');
+        showSuccess('Đăng câu trả lời thành công! Nội dung phản hồi của bạn đã được hiển thị bên dưới câu hỏi.');
         setAnswerContent('');
         await fetchComments();
       } else {
         const err = await res.json();
-        message.error(err.detail || 'Có lỗi xảy ra');
+        showError(err.detail || 'Có lỗi xảy ra');
       }
     } catch (error) {
-      message.error('Lỗi kết nối server');
+      showError('Lỗi kết nối server');
     } finally {
       setSubmitting(false);
     }
@@ -431,12 +602,12 @@ const PostDetailPage: React.FC = () => {
   const handleSubmitReply = async (parentId: number) => {
     const token = localStorage.getItem('access_token');
     if (!token) {
-      message.warning('Vui lòng đăng nhập để phản hồi');
+      showWarning('Vui lòng đăng nhập để phản hồi');
       history.push('/auth');
       return;
     }
     if (!replyContent.trim()) {
-      message.warning('Vui lòng nhập nội dung phản hồi');
+      showWarning('Vui lòng nhập nội dung phản hồi');
       return;
     }
     setSubmitting(true);
@@ -450,16 +621,16 @@ const PostDetailPage: React.FC = () => {
         body: JSON.stringify({ post: Number(id), content: replyContent, parent: parentId })
       });
       if (res.ok) {
-        message.success('Đã đăng phản hồi!');
+        showSuccess('Đăng phản hồi thành công! Ý kiến của bạn đã được cập nhật thành công.');
         setReplyContent('');
         setReplyingTo(null);
         await fetchComments();
       } else {
         const err = await res.json();
-        message.error(err.detail || 'Có lỗi xảy ra');
+        showError(err.detail || 'Có lỗi xảy ra');
       }
     } catch (error) {
-      message.error('Lỗi kết nối server');
+      showError('Lỗi kết nối server');
     } finally {
       setSubmitting(false);
     }
@@ -474,14 +645,14 @@ const PostDetailPage: React.FC = () => {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
-        message.success('Đã cập nhật trạng thái chấp nhận!');
+        showSuccess('Đã cập nhật trạng thái chấp nhận!');
         await fetchComments();
       } else {
         const err = await res.json();
-        message.error(err.detail || 'Không thể cập nhật');
+        showError(err.detail || 'Không thể cập nhật');
       }
     } catch (error) {
-      message.error('Lỗi kết nối server');
+      showError('Lỗi kết nối server');
     }
   };
 
@@ -515,6 +686,92 @@ const PostDetailPage: React.FC = () => {
   const isLecturer = user && user.role === 'LECTURER';
   const canAccept = isPostAuthor || isLecturer;
 
+  const notificationContent = (
+    <div style={{ width: 360 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, paddingBottom: 8, borderBottom: '1px solid #f0f0f0' }}>
+        <Text strong style={{ fontSize: 16 }}>Thông báo</Text>
+        {unreadCount > 0 && (
+          <a onClick={handleMarkAllAsRead} className="notification-action-link">
+            Đánh dấu tất cả đã đọc
+          </a>
+        )}
+      </div>
+      <div style={{ maxHeight: 320, overflowY: 'auto' }}>
+        {notifications.length > 0 ? (
+          <>
+            <List
+              itemLayout="horizontal"
+              dataSource={notifications.slice(0, notificationLimit)}
+              renderItem={(item) => (
+                <List.Item
+                  onClick={() => handleReadNotification(item)}
+                  style={{
+                    cursor: 'pointer',
+                    padding: '10px 12px',
+                    borderRadius: 4,
+                    backgroundColor: item.is_read ? '#fff' : '#f0f8ff',
+                    transition: 'background-color 0.2s',
+                    marginBottom: 4,
+                    border: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12
+                  }}
+                  className="notification-item"
+                >
+                  <Avatar 
+                    style={{ backgroundColor: item.notification_type === 'WELCOME' ? '#f48024' : '#0074cc', flexShrink: 0 }}
+                    icon={<UserOutlined />}
+                  />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ 
+                      fontSize: 13, 
+                      color: '#232629', 
+                      lineHeight: 1.4,
+                      fontWeight: item.is_read ? 400 : 500 
+                    }}>
+                      {item.message}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#6a737c', marginTop: 4 }}>
+                      {moment(item.created_at).fromNow()}
+                    </div>
+                  </div>
+                  {!item.is_read && (
+                    <div style={{ 
+                      width: 8, 
+                      height: 8, 
+                      borderRadius: '50%', 
+                      backgroundColor: '#f48024', 
+                      flexShrink: 0 
+                    }} />
+                  )}
+                </List.Item>
+              )}
+            />
+            {notifications.length > notificationLimit && (
+              <div style={{ textAlign: 'center', padding: '4px 0', borderTop: '1px solid #f0f0f0', marginTop: 4 }}>
+                <Button 
+                  type="text" 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setNotificationLimit(prev => prev + 10);
+                  }}
+                  className="notification-more-btn"
+                >
+                  Xem thêm
+                </Button>
+              </div>
+            )}
+          </>
+        ) : (
+          <div style={{ padding: '24px 0', textAlign: 'center' }}>
+            <Empty description="Không có thông báo nào" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <ConfigProvider
       theme={{
@@ -539,6 +796,35 @@ const PostDetailPage: React.FC = () => {
           width: '100%',
           zIndex: 1000
         }}>
+          <style>{`
+            .notification-item:hover {
+              background-color: #e6f7ff !important;
+            }
+            .notification-action-link {
+              color: #f48024 !important;
+              font-size: 13px;
+              transition: color 0.2s;
+            }
+            .notification-action-link:hover {
+              color: #e06d0f !important;
+            }
+            .notification-more-btn {
+              color: #f48024 !important;
+              font-weight: 500;
+              font-size: 13px;
+              width: 100%;
+              padding: 4px 0;
+              transition: all 0.2s;
+            }
+            .notification-more-btn:hover {
+              color: #e06d0f !important;
+              background-color: #fdf6f0 !important;
+            }
+            .ant-popover, .ant-popover-content {
+              transition: none !important;
+              animation: none !important;
+            }
+          `}</style>
           <div style={{ display: 'flex', alignItems: 'center', width: '100%', maxWidth: 1100, margin: '0 auto', padding: '0 24px' }}>
             <div
               style={{ fontSize: 22, fontWeight: 800, color: '#000', cursor: 'pointer', display: 'flex', alignItems: 'center', marginRight: 24 }}
@@ -557,9 +843,20 @@ const PostDetailPage: React.FC = () => {
             <Space size={20}>
               {user ? (
                 <>
-                  <Badge count={0} size="small">
-                    <Button type="text" icon={<BellOutlined style={{ fontSize: 20, color: '#525960' }} />} />
-                  </Badge>
+                  <Popover
+                    content={notificationContent}
+                    title={null}
+                    trigger="click"
+                    placement="bottom"
+                    overlayClassName="notification-popover"
+                    transitionName=""
+                    motion={{ motionName: '' }}
+                    getPopupContainer={(triggerNode) => triggerNode.parentElement || document.body}
+                  >
+                    <Badge count={unreadCount} size="small" overflowCount={99}>
+                      <Button type="text" icon={<BellOutlined style={{ fontSize: 20, color: '#525960' }} />} />
+                    </Badge>
+                  </Popover>
                   <Dropdown menu={{ items: userMenuItems }} placement="bottomRight" arrow>
                     <Avatar style={{ backgroundColor: '#f48024', cursor: 'pointer' }} icon={<UserOutlined />} />
                   </Dropdown>
@@ -692,6 +989,80 @@ const PostDetailPage: React.FC = () => {
             </div>
           </div>
         </Content>
+        {activeToast && (
+          <div 
+            onClick={() => {
+              if (activeToast.type === 'SUCCESS' || activeToast.type === 'ERROR' || activeToast.type === 'WARNING') {
+                setActiveToast(null);
+              } else {
+                handleReadNotification(activeToast);
+                setActiveToast(null);
+              }
+            }}
+            style={{
+              position: 'fixed',
+              bottom: 16,
+              left: 'max(16px, calc(max(0px, (100vw - 1264px) / 2) + 164px - 300px - 16px))',
+              width: 300,
+              background: '#fff',
+              borderRadius: 0,
+              border: '1px solid #e3e6e8',
+              padding: '14px 18px',
+              cursor: 'pointer',
+              zIndex: 9999,
+              display: 'flex',
+              gap: 12,
+              alignItems: 'center'
+            }}
+          >
+            {activeToast.type === 'WELCOME' ? (
+              <Avatar size={42} style={{ backgroundColor: '#f48024', flexShrink: 0 }} icon={<UserOutlined />} />
+            ) : (activeToast.type === 'REPLY_POST' || activeToast.type === 'REPLY_COMMENT') ? (
+              activeToast.actor_name ? (
+                <Avatar size={42} style={{ backgroundColor: '#0074cc', flexShrink: 0, fontWeight: 700, fontSize: 18 }}>
+                  {activeToast.actor_name.charAt(0).toUpperCase()}
+                </Avatar>
+              ) : (
+                <Avatar size={42} style={{ backgroundColor: '#0074cc', flexShrink: 0 }} icon={<UserOutlined />} />
+              )
+            ) : user && user.avatar ? (
+              <Avatar size={42} src={user.avatar} style={{ flexShrink: 0 }} />
+            ) : user && user.username ? (
+              <Avatar size={42} style={{ backgroundColor: '#f48024', flexShrink: 0, fontWeight: 700, fontSize: 18 }}>
+                {user.username.charAt(0).toUpperCase()}
+              </Avatar>
+            ) : (
+              <Avatar size={42} style={{ backgroundColor: '#f48024', flexShrink: 0 }} icon={<UserOutlined />} />
+            )}
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ 
+                fontSize: 14, 
+                fontWeight: 700, 
+                color: activeToast.type === 'SUCCESS' ? '#5eba7d' : 
+                       activeToast.type === 'ERROR' ? '#d12d2d' : '#f48024',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                marginBottom: 2
+              }}>
+                {activeToast.type === 'SUCCESS' ? 'Thành công' :
+                 activeToast.type === 'ERROR' ? 'Thất bại' :
+                 activeToast.type === 'WARNING' ? 'Cảnh báo' : 'Thông báo'}
+              </div>
+              <div style={{ 
+                fontSize: 12.5, 
+                color: '#232629', 
+                lineHeight: 1.4, 
+                display: '-webkit-box', 
+                WebkitLineClamp: 3, 
+                WebkitBoxOrient: 'vertical', 
+                overflow: 'hidden' 
+              }}>
+                {activeToast.message}
+              </div>
+            </div>
+          </div>
+        )}
       </Layout>
     </ConfigProvider>
   );

@@ -11,7 +11,8 @@ import {
   message,
   Card,
   Space,
-  Alert
+  Alert,
+  Avatar
 } from 'antd';
 import { 
   UserOutlined, 
@@ -55,6 +56,27 @@ const AuthForm: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [requestSent, setRequestSent] = useState(false);
 
+  const [activeToast, setActiveToast] = useState<{ type: 'SUCCESS' | 'ERROR' | 'WARNING'; message: string } | null>(null);
+
+  const showSuccess = (msg: string) => {
+    setActiveToast({ type: 'SUCCESS', message: msg });
+  };
+  const showError = (msg: string) => {
+    setActiveToast({ type: 'ERROR', message: msg });
+  };
+  const showWarning = (msg: string) => {
+    setActiveToast({ type: 'WARNING', message: msg });
+  };
+
+  React.useEffect(() => {
+    if (activeToast) {
+      const timer = setTimeout(() => {
+        setActiveToast(null);
+      }, 3500);
+      return () => clearTimeout(timer);
+    }
+  }, [activeToast]);
+
   const onFinish = async (values: any) => {
     setLoading(true);
     let endpoint = '';
@@ -75,31 +97,31 @@ const AuthForm: React.FC = () => {
 
       if (response.ok) {
         if (formType === 'login') {
-          message.success('Đăng nhập thành công!');
+          localStorage.setItem('trigger_toast_success', 'Đăng nhập thành công! Chào mừng bạn quay trở lại diễn đàn.');
           localStorage.setItem('access_token', data.access);
           localStorage.setItem('refresh_token', data.refresh);
           localStorage.setItem('user', JSON.stringify(data.user));
           history.push('/forum');
         } else if (formType === 'register') {
-          message.success('Đăng ký thành công! Hãy đăng nhập để tiếp tục.');
+          showSuccess('Đăng ký thành công! Hãy đăng nhập để tiếp tục.');
           setFormType('login');
         } else {
           setRequestSent(true);
-          message.success('Yêu cầu đã được gửi!');
+          showSuccess('Yêu cầu đã được gửi!');
         }
       } else {
         // Áp dụng dịch lỗi cho mọi trường hợp
         if (data.errors) {
           Object.keys(data.errors).forEach(key => {
-            message.error(translateError(key, data.errors[key]));
+            showError(translateError(key, data.errors[key]));
           });
         } else {
           const rawError = data.error || data.detail || 'Có lỗi xảy ra, vui lòng thử lại.';
-          message.error(translateError('general', rawError));
+          showError(translateError('general', rawError));
         }
       }
     } catch (error) {
-      message.error('Không thể kết nối đến máy chủ.');
+      showError('Không thể kết nối đến máy chủ.');
     } finally {
       setLoading(false);
     }
@@ -210,6 +232,54 @@ const AuthForm: React.FC = () => {
           )}
         </Card>
       </Content>
+      {activeToast && (
+        <div 
+          onClick={() => setActiveToast(null)}
+          style={{
+            position: 'fixed',
+            bottom: 16,
+            left: 16,
+            width: 300,
+            background: '#fff',
+            borderRadius: 0,
+            border: '1px solid #e3e6e8',
+            padding: '14px 18px',
+            cursor: 'pointer',
+            zIndex: 9999,
+            display: 'flex',
+            gap: 12,
+            alignItems: 'center'
+          }}
+        >
+          <Avatar size={42} style={{ backgroundColor: activeToast.type === 'SUCCESS' ? '#f48024' : '#d12d2d', flexShrink: 0 }} icon={<UserOutlined />} />
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ 
+              fontSize: 14, 
+              fontWeight: 700, 
+              color: activeToast.type === 'SUCCESS' ? '#5eba7d' : 
+                     activeToast.type === 'ERROR' ? '#d12d2d' : '#f48024',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              marginBottom: 2
+            }}>
+              {activeToast.type === 'SUCCESS' ? 'Thành công' :
+               activeToast.type === 'ERROR' ? 'Thất bại' : 'Cảnh báo'}
+            </div>
+            <div style={{ 
+              fontSize: 12.5, 
+              color: '#232629', 
+              lineHeight: 1.4, 
+              display: '-webkit-box', 
+              WebkitLineClamp: 3, 
+              WebkitBoxOrient: 'vertical', 
+              overflow: 'hidden' 
+            }}>
+              {activeToast.message}
+            </div>
+          </div>
+        </div>
+      )}
     </Layout>
   );
 };

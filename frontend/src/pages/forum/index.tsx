@@ -13,7 +13,8 @@ import {
   Col, 
   Modal, 
   Form, 
-  message, 
+  message,
+  notification,
   ConfigProvider, 
   theme,
   List,
@@ -22,7 +23,8 @@ import {
   Badge,
   Tooltip,
   Dropdown,
-  Select
+  Select,
+  Popover
 } from 'antd';
 import type { MenuProps } from 'antd';
 import { 
@@ -36,7 +38,10 @@ import {
   LogoutOutlined,
   FireOutlined,
   BellOutlined,
-  SettingOutlined
+  SettingOutlined,
+  CheckCircleFilled,
+  CloseCircleFilled,
+  ExclamationCircleFilled
 } from '@ant-design/icons';
 import { history } from 'umi';
 import moment from 'moment';
@@ -81,6 +86,36 @@ const ForumPage: React.FC = () => {
   const [isFocused, setIsFocused] = useState(false);
   const [editorEmpty, setEditorEmpty] = useState(true);
   const [fullSearchText, setFullSearchText] = useState('');
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [unreadCount, setUnreadCount] = useState<number>(0);
+  const [notificationLimit, setNotificationLimit] = useState<number>(10);
+  const notifiedIdsRef = React.useRef<Set<number>>(new Set());
+  const isFirstLoadRef = React.useRef(true);
+  const [activeToast, setActiveToast] = useState<{ id: any; type: string; message: string; target_post_id?: any } | null>(null);
+
+  const showSuccess = (msg: string) => {
+    setActiveToast({
+      id: Date.now(),
+      type: 'SUCCESS',
+      message: msg
+    });
+  };
+
+  const showError = (msg: string) => {
+    setActiveToast({
+      id: Date.now(),
+      type: 'ERROR',
+      message: msg
+    });
+  };
+
+  const showWarning = (msg: string) => {
+    setActiveToast({
+      id: Date.now(),
+      type: 'WARNING',
+      message: msg
+    });
+  };
 
   const BASE_URL = 'http://localhost:8002';
 
@@ -110,7 +145,7 @@ const ForumPage: React.FC = () => {
       // Đảm bảo tương thích cả khi Backend có phân trang hoặc không
       setPosts(data.results || (Array.isArray(data) ? data : []));
     } catch (error) {
-      message.error('Không thể tải bài viết');
+      showError('Không thể tải bài viết');
     } finally {
       setLoading(false);
     }
@@ -126,20 +161,147 @@ const ForumPage: React.FC = () => {
     }
   };
 
+  const triggerRealtimeToast = (item: any) => {
+    setActiveToast({
+      id: item.id,
+      type: item.notification_type,
+      message: item.message,
+      target_post_id: item.target_post_id,
+      actor_name: item.actor_name
+    });
+  };
+
+  const fetchNotifications = async () => {
+    const token = localStorage.getItem('access_token');
+    if (!token) return;
+    try {
+      const res = await fetch(`${BASE_URL}/api/notifications/`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setNotifications(data);
+        const unread = data.filter((n: any) => !n.is_read).length;
+        setUnreadCount(unread);
+
+        // Phát hiện và hiển thị Toast kiểu Facebook cho thông báo mới
+        data.forEach((item: any) => {
+          if (!item.is_read && !notifiedIdsRef.current.has(item.id)) {
+            notifiedIdsRef.current.add(item.id);
+            if (!isFirstLoadRef.current) {
+              triggerRealtimeToast(item);
+            }
+          }
+        });
+
+        if (isFirstLoadRef.current) {
+          data.forEach((item: any) => {
+            if (!item.is_read) {
+              notifiedIdsRef.current.add(item.id);
+            }
+          });
+          isFirstLoadRef.current = false;
+        }
+      }
+    } catch (e) {
+      console.error('Lỗi tải thông báo', e);
+    }
+  };
+
+  const handleReadNotification = async (notificationItem: any) => {
+    if (!notificationItem.is_read) {
+      const token = localStorage.getItem('access_token');
+      try {
+        await fetch(`${BASE_URL}/api/notifications/${notificationItem.id}/`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ is_read: true })
+        });
+        setNotifications(prev => 
+          prev.map(n => n.id === notificationItem.id ? { ...n, is_read: true } : n)
+        );
+        setUnreadCount(c => Math.max(0, c - 1));
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    
+    // Tự động đóng toast nếu có
+    notification.destroy(notificationItem.id);
+
+    if (notificationItem.target_post_id) {
+      history.push(`/forum/post/${notificationItem.target_post_id}`);
+    }
+  };
+
+  const handleMarkAllAsRead = async () => {
+    const token = localStorage.getItem('access_token');
+    try {
+      const res = await fetch(`${BASE_URL}/api/notifications/mark_all_as_read/`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        // Tắt tất cả các toasts đang hiển thị
+        notifications.forEach(n => {
+          notification.destroy(n.id);
+        });
+        setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+        setUnreadCount(0);
+        showSuccess('Đã đánh dấu tất cả thông báo là đã đọc');
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   useEffect(() => {
+    const pendingToastSuccess = localStorage.getItem('trigger_toast_success');
+    if (pendingToastSuccess) {
+      showSuccess(pendingToastSuccess);
+      localStorage.removeItem('trigger_toast_success');
+    }
+    const pendingToastError = localStorage.getItem('trigger_toast_error');
+    if (pendingToastError) {
+      showError(pendingToastError);
+      localStorage.removeItem('trigger_toast_error');
+    }
+
     const savedUser = localStorage.getItem('user');
-    if (savedUser) setUser(JSON.parse(savedUser));
+    let interval: any;
+    if (savedUser) {
+      setUser(JSON.parse(savedUser));
+      fetchNotifications();
+      
+      // Kiểm tra thông báo mới mỗi 10 giây
+      interval = setInterval(fetchNotifications, 10000);
+    }
     fetchData();
     fetchTags();
     if (editorRef.current) {
       setEditorTagsAndText(selectedTags, searchQuery);
     }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
   }, []);
+
+  useEffect(() => {
+    if (activeToast) {
+      const timer = setTimeout(() => {
+        setActiveToast(null);
+      }, 3500);
+      return () => clearTimeout(timer);
+    }
+  }, [activeToast]);
 
   const handleCreatePost = async (values: any) => {
     const token = localStorage.getItem('access_token');
     if (!token) {
-      message.warning('Vui lòng đăng nhập để đăng bài');
+      showWarning('Vui lòng đăng nhập để đăng bài');
       history.push('/auth');
       return;
     }
@@ -161,16 +323,16 @@ const ForumPage: React.FC = () => {
       });
 
       if (res.ok) {
-        message.success('Đăng bài thành công!');
+        showSuccess('Đăng bài thành công! Câu hỏi của bạn đã được đăng công khai trên diễn đàn.');
         setIsModalOpen(false);
         form.resetFields();
         fetchData();
         fetchTags();
       } else {
-        message.error('Có lỗi xảy ra khi đăng bài');
+        showError('Có lỗi xảy ra khi đăng bài');
       }
     } catch (error) {
-      message.error('Lỗi kết nối server');
+      showError('Lỗi kết nối server');
     } finally {
       setLoading(false);
     }
@@ -568,6 +730,92 @@ const ForumPage: React.FC = () => {
     </div>
   );
 
+  const notificationContent = (
+    <div style={{ width: 360 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, paddingBottom: 8, borderBottom: '1px solid #f0f0f0' }}>
+        <Text strong style={{ fontSize: 16 }}>Thông báo</Text>
+        {unreadCount > 0 && (
+          <a onClick={handleMarkAllAsRead} className="notification-action-link">
+            Đánh dấu tất cả đã đọc
+          </a>
+        )}
+      </div>
+      <div style={{ maxHeight: 320, overflowY: 'auto' }}>
+        {notifications.length > 0 ? (
+          <>
+            <List
+              itemLayout="horizontal"
+              dataSource={notifications.slice(0, notificationLimit)}
+              renderItem={(item) => (
+                <List.Item
+                  onClick={() => handleReadNotification(item)}
+                  style={{
+                    cursor: 'pointer',
+                    padding: '10px 12px',
+                    borderRadius: 4,
+                    backgroundColor: item.is_read ? '#fff' : '#f0f8ff',
+                    transition: 'background-color 0.2s',
+                    marginBottom: 4,
+                    border: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12
+                  }}
+                  className="notification-item"
+                >
+                  <Avatar 
+                    style={{ backgroundColor: item.notification_type === 'WELCOME' ? '#f48024' : '#0074cc', flexShrink: 0 }}
+                    icon={<UserOutlined />}
+                  />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ 
+                      fontSize: 13, 
+                      color: '#232629', 
+                      lineHeight: 1.4,
+                      fontWeight: item.is_read ? 400 : 500 
+                    }}>
+                      {item.message}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#6a737c', marginTop: 4 }}>
+                      {moment(item.created_at).fromNow()}
+                    </div>
+                  </div>
+                  {!item.is_read && (
+                    <div style={{ 
+                      width: 8, 
+                      height: 8, 
+                      borderRadius: '50%', 
+                      backgroundColor: '#f48024', 
+                      flexShrink: 0 
+                    }} />
+                  )}
+                </List.Item>
+              )}
+            />
+            {notifications.length > notificationLimit && (
+              <div style={{ textAlign: 'center', padding: '4px 0', borderTop: '1px solid #f0f0f0', marginTop: 4 }}>
+                <Button 
+                  type="text" 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setNotificationLimit(prev => prev + 10);
+                  }}
+                  className="notification-more-btn"
+                >
+                  Xem thêm
+                </Button>
+              </div>
+            )}
+          </>
+        ) : (
+          <div style={{ padding: '24px 0', textAlign: 'center' }}>
+            <Empty description="Không có thông báo nào" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <ConfigProvider 
       theme={{ 
@@ -602,99 +850,137 @@ const ForumPage: React.FC = () => {
             </div>
 
             <div style={{ flex: 1, padding: '0 24px 0 0', display: 'flex', alignItems: 'center' }}>
-              <style>{`
-                .forum-search-editor {
-                  position: relative;
-                  border: 1px solid #d9d9d9;
-                  border-radius: 3px 0 0 3px;
-                  padding: 4px 11px;
-                  height: 32px;
-                  box-sizing: border-box;
-                  white-space: nowrap;
-                  overflow-x: auto;
-                  overflow-y: hidden;
-                  outline: none;
-                  background-color: #fff;
-                  flex: 1;
-                  min-width: 0;
-                  width: 0;
-                  cursor: text;
-                  font-size: 14px;
-                  line-height: 22px;
-                  transition: all 0.3s;
-                  -ms-overflow-style: none;  /* IE and Edge */
-                  scrollbar-width: none;  /* Firefox */
-                }
-                .forum-search-editor::-webkit-scrollbar {
-                  display: none; /* Chrome, Safari and Opera */
-                }
-                .forum-search-editor:hover {
-                  border-color: #f48024;
-                }
-                .forum-search-editor:focus {
-                  border-color: #f48024;
-                  box-shadow: 0 0 0 2px rgba(244, 128, 36, 0.2);
-                }
-                .forum-search-editor.show-placeholder:before {
-                  content: attr(placeholder);
-                  color: #bfbfbf;
-                  cursor: text;
-                  pointer-events: none;
-                  position: absolute;
-                  left: 11px;
-                  top: 4px;
-                }
-                .forum-search-tag {
-                  background-color: #e1ecf4;
-                  color: #39739d;
-                  border-radius: 2px;
-                  padding: 0 6px;
-                  margin: 0 2px;
-                  display: inline-block;
-                  font-weight: 500;
-                  user-select: none;
-                }
-                .forum-search-tag:hover {
-                  background-color: #d0e3f0;
-                }
-              `}</style>
-              <div
-                ref={editorRef}
-                className={`forum-search-editor ${editorEmpty ? 'show-placeholder' : ''}`}
-                contentEditable
-                onInput={handleEditorInput}
-                onKeyDown={handleEditorKeyDown}
-                onFocus={() => setIsFocused(true)}
-                onBlur={() => setIsFocused(false)}
-                placeholder="Tìm kiếm... (Sử dụng #tag để lọc theo thẻ)"
-                style={{
-                  borderColor: isFocused ? '#f48024' : '#d9d9d9',
-                  boxShadow: isFocused ? '0 0 0 2px rgba(244, 128, 36, 0.2)' : 'none',
-                }}
-              />
-              <Button 
-                type="primary" 
-                icon={<SearchOutlined />} 
-                onClick={executeSearch}
-                style={{ 
-                  backgroundColor: '#f48024', 
-                  borderColor: '#f48024', 
-                  borderTopLeftRadius: 0, 
-                  borderBottomLeftRadius: 0,
-                  height: 32,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}
-              />
-            </div>
+            <style>{`
+              .forum-search-editor {
+                position: relative;
+                border: 1px solid #d9d9d9;
+                border-radius: 3px 0 0 3px;
+                padding: 4px 11px;
+                height: 32px;
+                box-sizing: border-box;
+                white-space: nowrap;
+                overflow-x: auto;
+                overflow-y: hidden;
+                outline: none;
+                background-color: #fff;
+                flex: 1;
+                min-width: 0;
+                width: 0;
+                cursor: text;
+                font-size: 14px;
+                line-height: 22px;
+                transition: all 0.3s;
+                -ms-overflow-style: none;  /* IE and Edge */
+                scrollbar-width: none;  /* Firefox */
+              }
+              .forum-search-editor::-webkit-scrollbar {
+                display: none; /* Chrome, Safari and Opera */
+              }
+              .forum-search-editor:hover {
+                border-color: #f48024;
+              }
+              .forum-search-editor:focus {
+                border-color: #f48024;
+                box-shadow: 0 0 0 2px rgba(244, 128, 36, 0.2);
+              }
+              .forum-search-editor.show-placeholder:before {
+                content: attr(placeholder);
+                color: #bfbfbf;
+                cursor: text;
+                pointer-events: none;
+                position: absolute;
+                left: 11px;
+                top: 4px;
+              }
+              .forum-search-tag {
+                background-color: #e1ecf4;
+                color: #39739d;
+                border-radius: 2px;
+                padding: 0 6px;
+                margin: 0 2px;
+                display: inline-block;
+                font-weight: 500;
+                user-select: none;
+              }
+              .forum-search-tag:hover {
+                background-color: #d0e3f0;
+              }
+              .notification-item:hover {
+                background-color: #e6f7ff !important;
+              }
+              .notification-action-link {
+                color: #f48024 !important;
+                font-size: 13px;
+                transition: color 0.2s;
+              }
+              .notification-action-link:hover {
+                color: #e06d0f !important;
+              }
+              .notification-more-btn {
+                color: #f48024 !important;
+                font-weight: 500;
+                font-size: 13px;
+                width: 100%;
+                padding: 4px 0;
+                transition: all 0.2s;
+              }
+              .notification-more-btn:hover {
+                color: #e06d0f !important;
+                background-color: #fdf6f0 !important;
+              }
+              .ant-popover, .ant-popover-content {
+                transition: none !important;
+                animation: none !important;
+              }
+            `}</style>
+            <div
+              ref={editorRef}
+              className={`forum-search-editor ${editorEmpty ? 'show-placeholder' : ''}`}
+              contentEditable
+              onInput={handleEditorInput}
+              onKeyDown={handleEditorKeyDown}
+              onFocus={() => setIsFocused(true)}
+              onBlur={() => setIsFocused(false)}
+              placeholder="Tìm kiếm... (Sử dụng #tag để lọc theo thẻ)"
+              style={{
+                borderColor: isFocused ? '#f48024' : '#d9d9d9',
+                boxShadow: isFocused ? '0 0 0 2px rgba(244, 128, 36, 0.2)' : 'none',
+              }}
+            />
+            <Button 
+              type="primary" 
+              icon={<SearchOutlined />} 
+              onClick={executeSearch}
+              style={{ 
+                backgroundColor: '#f48024', 
+                borderColor: '#f48024', 
+                borderTopLeftRadius: 0, 
+                borderBottomLeftRadius: 0,
+                height: 32,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            />
+          </div>
 
-            <Space size={20}>
-              {user ? (
-                <>
-                  <Badge count={0} size="small">
+          <Space size={20}>
+            {user ? (
+              <>
+                <Popover
+                  content={notificationContent}
+                  title={null}
+                  trigger="click"
+                  placement="bottom"
+                  overlayClassName="notification-popover"
+                  transitionName=""
+                  motion={{ motionName: '' }}
+                  getPopupContainer={(triggerNode) => triggerNode.parentElement || document.body}
+                >
+                  <Badge count={unreadCount} size="small" overflowCount={99}>
                     <Button type="text" icon={<BellOutlined style={{ fontSize: 20, color: '#525960' }} />} />
                   </Badge>
+                </Popover>
                   <Dropdown menu={{ items: userMenuItems }} placement="bottomRight" arrow>
                     <Avatar 
                       style={{ backgroundColor: '#f48024', cursor: 'pointer' }} 
@@ -907,6 +1193,80 @@ const ForumPage: React.FC = () => {
             </div>
           </Form>
         </Modal>
+        {activeToast && (
+          <div 
+            onClick={() => {
+              if (activeToast.type === 'SUCCESS' || activeToast.type === 'ERROR' || activeToast.type === 'WARNING') {
+                setActiveToast(null);
+              } else {
+                handleReadNotification(activeToast);
+                setActiveToast(null);
+              }
+            }}
+            style={{
+              position: 'fixed',
+              bottom: 16,
+              left: 'max(16px, calc(max(0px, (100vw - 1264px) / 2) + 164px - 300px - 16px))',
+              width: 300,
+              background: '#fff',
+              borderRadius: 0,
+              border: '1px solid #e3e6e8',
+              padding: '14px 18px',
+              cursor: 'pointer',
+              zIndex: 9999,
+              display: 'flex',
+              gap: 12,
+              alignItems: 'center'
+            }}
+          >
+            {activeToast.type === 'WELCOME' ? (
+              <Avatar size={42} style={{ backgroundColor: '#f48024', flexShrink: 0 }} icon={<UserOutlined />} />
+            ) : (activeToast.type === 'REPLY_POST' || activeToast.type === 'REPLY_COMMENT') ? (
+              activeToast.actor_name ? (
+                <Avatar size={42} style={{ backgroundColor: '#0074cc', flexShrink: 0, fontWeight: 700, fontSize: 18 }}>
+                  {activeToast.actor_name.charAt(0).toUpperCase()}
+                </Avatar>
+              ) : (
+                <Avatar size={42} style={{ backgroundColor: '#0074cc', flexShrink: 0 }} icon={<UserOutlined />} />
+              )
+            ) : user && user.avatar ? (
+              <Avatar size={42} src={user.avatar} style={{ flexShrink: 0 }} />
+            ) : user && user.username ? (
+              <Avatar size={42} style={{ backgroundColor: '#f48024', flexShrink: 0, fontWeight: 700, fontSize: 18 }}>
+                {user.username.charAt(0).toUpperCase()}
+              </Avatar>
+            ) : (
+              <Avatar size={42} style={{ backgroundColor: '#f48024', flexShrink: 0 }} icon={<UserOutlined />} />
+            )}
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ 
+                fontSize: 14, 
+                fontWeight: 700, 
+                color: activeToast.type === 'SUCCESS' ? '#5eba7d' : 
+                       activeToast.type === 'ERROR' ? '#d12d2d' : '#f48024',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                marginBottom: 2
+              }}>
+                {activeToast.type === 'SUCCESS' ? 'Thành công' :
+                 activeToast.type === 'ERROR' ? 'Thất bại' :
+                 activeToast.type === 'WARNING' ? 'Cảnh báo' : 'Thông báo'}
+              </div>
+              <div style={{ 
+                fontSize: 12.5, 
+                color: '#232629', 
+                lineHeight: 1.4, 
+                display: '-webkit-box', 
+                WebkitLineClamp: 3, 
+                WebkitBoxOrient: 'vertical', 
+                overflow: 'hidden' 
+              }}>
+                {activeToast.message}
+              </div>
+            </div>
+          </div>
+        )}
       </Layout>
     </ConfigProvider>
   );
