@@ -115,11 +115,15 @@ const AuthForm: React.FC = () => {
 
       if (response.ok) {
         if (formType === 'login') {
-          localStorage.setItem('trigger_toast_success', 'Đăng nhập thành công! Chào mừng bạn quay trở lại diễn đàn.');
+          localStorage.setItem('trigger_toast_success', 'Đăng nhập thành công! Chào mừng bạn quay trở lại.');
           localStorage.setItem('access_token', data.access);
           localStorage.setItem('refresh_token', data.refresh);
           localStorage.setItem('user', JSON.stringify(data.user));
-          history.push('/forum');
+          if (data.user && data.user.role === 'ADMIN') {
+            history.push('/admin');
+          } else {
+            history.push('/forum');
+          }
         } else if (formType === 'register') {
           showSuccess('Đăng ký thành công! Hãy đăng nhập để tiếp tục.');
           setFormType('login');

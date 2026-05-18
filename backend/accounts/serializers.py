@@ -98,6 +98,15 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         'no_active_account': 'Tên đăng nhập hoặc mật khẩu không chính xác.'
     }
     def validate(self, attrs):
+        username = attrs.get('username')
+        if username:
+            from django.db.models import Q
+            user = User.objects.filter(Q(username=username) | Q(email=username)).first()
+            if user and not user.is_active:
+                raise serializers.ValidationError({
+                    'detail': 'Tài khoản của bạn đã bị khóa bởi Quản trị viên.'
+                })
+        
         data = super().validate(attrs)
         avatar_url = None
         if self.user.avatar:

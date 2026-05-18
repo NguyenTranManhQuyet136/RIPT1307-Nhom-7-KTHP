@@ -224,6 +224,7 @@ export default function ProfilePage() {
   };
 
   const userMenuItems: MenuProps['items'] = [
+    ...(user?.role === 'ADMIN' ? [{ key: 'admin', icon: <SettingOutlined />, label: 'Trang quản trị', onClick: () => history.push('/admin') }] : []),
     { key: 'profile', icon: <UserOutlined />, label: 'Tài khoản', onClick: () => history.push('/forum/profile') },
     { key: 'settings', icon: <SettingOutlined />, label: 'Cài đặt' },
     { type: 'divider' },
