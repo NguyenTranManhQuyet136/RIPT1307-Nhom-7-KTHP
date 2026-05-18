@@ -11,6 +11,7 @@ urlpatterns = [
     path('api/tags/', include('tags.urls')),
     path('api/comments/', include('comments.urls')),
     path('api/notifications/', include('notifications.urls')),
+    path('api/admin/', include('admin_api.urls')),
 ]
 
 from django.conf import settings

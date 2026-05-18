@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     'tags',
     'comments',
     'notifications',
+    'admin_api',
 ]
 
 MIDDLEWARE = [

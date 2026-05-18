@@ -6,9 +6,11 @@ import threading
 
 from django.contrib.auth import get_user_model
 from comments.models import Comment
+from posts.models import Post
 from .models import Notification
 
 User = get_user_model()
+
 
 # Hàm hỗ trợ chạy gửi mail ngầm
 def send_email_background(subject, message, recipient_list):
@@ -27,6 +29,7 @@ def send_email_background(subject, message, recipient_list):
         )
     threading.Thread(target=run).start()
 
+
 # 1. BẮT SỰ KIỆN: KHI CÓ USER MỚI ĐĂNG KÝ
 @receiver(post_save, sender=User)
 def create_welcome_notification(sender, instance, created, **kwargs):
@@ -43,6 +46,7 @@ def create_welcome_notification(sender, instance, created, **kwargs):
                 message="Chúc mừng bạn đã tạo tài khoản thành công!",
                 recipient_list=[instance.email]
             )
+
 
 # 2. BẮT SỰ KIỆN: KHI CÓ NGƯỜI BÌNH LUẬN MỚI
 @receiver(post_save, sender=Comment)
@@ -79,3 +83,42 @@ def create_comment_notification(sender, instance, created, **kwargs):
                     message=f"Vào xem ngay: http://localhost:8000/forum/post/{post.id}",
                     recipient_list=[recipient.email]
                 )
+
+
+# 3. BẮT SỰ KIỆN: KHI CÓ BÀI ĐĂNG MỚI → Thông báo cho Admin & Giảng viên
+@receiver(post_save, sender=Post)
+def notify_new_post_created(sender, instance, created, **kwargs):
+    if created:
+        author = instance.author
+
+        # Lấy danh sách Admin và Giảng viên đã xác thực (trừ chính tác giả)
+        staff_users = User.objects.filter(
+            role__in=['ADMIN', 'LECTURER'],
+            is_verified=True,
+            is_active=True,
+        ).exclude(pk=author.pk)
+
+        staff_emails = list(staff_users.values_list('email', flat=True))
+
+        # Tạo thông báo trên quả chuông cho từng Admin/Giảng viên
+        notifications = [
+            Notification(
+                recipient=user,
+                actor=author,
+                notification_type='NEW_POST',
+                target_post_id=instance.id,
+            )
+            for user in staff_users
+        ]
+        Notification.objects.bulk_create(notifications)
+
+        # Gửi email thông báo chạy ngầm
+        if staff_emails:
+            send_email_background(
+                subject=f"EduForum - Câu hỏi mới: {instance.title}",
+                message=(
+                    f"Sinh viên {author.username} vừa đăng một câu hỏi mới.\n"
+                    f"Xem ngay tại: http://localhost:8000/forum/post/{instance.id}"
+                ),
+                recipient_list=staff_emails,
+            )
