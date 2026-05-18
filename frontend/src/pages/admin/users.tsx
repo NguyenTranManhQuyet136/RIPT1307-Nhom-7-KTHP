@@ -26,6 +26,7 @@ export default function AdminUsers() {
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedRole, setSelectedRole] = useState<string>('ALL');
   
   // Notifications state
   const [notifications, setNotifications] = useState<any[]>([]);
@@ -67,12 +68,30 @@ export default function AdminUsers() {
     }
   }, [activeToast]);
 
-  const fetchUsers = async (search?: string) => {
+  const fetchUsers = async (search?: string, roleFilter?: string) => {
     const token = localStorage.getItem('access_token');
     setLoading(true);
     try {
       let url = `${BASE_URL}/api/admin/users/`;
-      if (search) url += `?search=${encodeURIComponent(search)}`;
+      const queryParams = new URLSearchParams();
+      
+      const searchToUse = search !== undefined ? search : searchQuery;
+      if (searchToUse) {
+        queryParams.append('search', searchToUse);
+      }
+      
+      const roleToUse = roleFilter !== undefined ? roleFilter : selectedRole;
+      if (roleToUse === 'UNVERIFIED_LECTURER') {
+        queryParams.append('role', 'LECTURER');
+        queryParams.append('is_verified', 'false');
+      } else if (roleToUse && roleToUse !== 'ALL') {
+        queryParams.append('role', roleToUse);
+      }
+      
+      const queryString = queryParams.toString();
+      if (queryString) {
+        url += `?${queryString}`;
+      }
       
       const res = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -426,13 +445,29 @@ export default function AdminUsers() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
                 <Title level={4} style={{ margin: 0 }}>Danh sách Người dùng</Title>
                 <Space>
+                  <Select
+                    placeholder="Lọc theo vai trò"
+                    value={selectedRole}
+                    onChange={(val) => {
+                      setSelectedRole(val);
+                      fetchUsers(searchQuery, val);
+                    }}
+                    style={{ width: 150 }}
+                    options={[
+                      { label: 'Tất cả vai trò', value: 'ALL' },
+                      { label: 'Sinh viên', value: 'STUDENT' },
+                      { label: 'Giảng viên', value: 'LECTURER' },
+                      { label: 'Giảng viên chưa duyệt', value: 'UNVERIFIED_LECTURER' },
+                      { label: 'Admin', value: 'ADMIN' },
+                    ]}
+                  />
                   <Input 
-                    placeholder="Tìm username, email, họ tên..." 
+                    placeholder="Tìm username, email..." 
                     prefix={<SearchOutlined />}
                     value={searchQuery}
                     onChange={e => setSearchQuery(e.target.value)}
                     onPressEnter={() => fetchUsers(searchQuery)}
-                    style={{ width: 250 }}
+                    style={{ width: 220 }}
                     allowClear
                   />
                   <Button type="primary" onClick={() => fetchUsers(searchQuery)}>Tìm kiếm</Button>
