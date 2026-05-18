@@ -29,10 +29,19 @@ class CommentViewSet(viewsets.ModelViewSet):
         comment = self.get_object()
         post = comment.post
         
-        # Kiểm tra quyền: Chỉ tác giả bài viết hoặc giảng viên
-        if request.user != post.author and request.user.role != 'LECTURER':
+        # Kiểm tra quyền: Chỉ tác giả bài viết, giảng viên đã xác thực hoặc admin
+        is_lecturer = request.user.role == 'LECTURER'
+        is_verified_lecturer = is_lecturer and getattr(request.user, 'is_verified', False)
+        is_admin = request.user.role == 'ADMIN'
+        
+        if request.user != post.author and not is_verified_lecturer and not is_admin:
+            if is_lecturer and not getattr(request.user, 'is_verified', False):
+                return Response(
+                    {'detail': 'Giảng viên chưa xác thực không có quyền chọn câu trả lời chuẩn.'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
             return Response(
-                {'detail': 'Chỉ tác giả bài viết hoặc giảng viên mới có quyền này.'},
+                {'detail': 'Chỉ tác giả bài viết, giảng viên đã xác thực hoặc admin mới có quyền này.'},
                 status=status.HTTP_403_FORBIDDEN
             )
 

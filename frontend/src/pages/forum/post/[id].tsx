@@ -43,6 +43,24 @@ import moment from 'moment';
 import 'moment/locale/vi';
 
 moment.locale('vi');
+moment.updateLocale('vi', {
+  relativeTime: {
+    future: '%s tới',
+    past: '%s trước',
+    s: 'vài giây',
+    ss: '%d giây',
+    m: '1 phút',
+    mm: '%d phút',
+    h: '1 giờ',
+    hh: '%d giờ',
+    d: '1 ngày',
+    dd: '%d ngày',
+    M: '1 tháng',
+    MM: '%d tháng',
+    y: '1 năm',
+    yy: '%d năm'
+  }
+});
 
 const { Header, Content } = Layout;
 const { Title, Text, Paragraph } = Typography;
@@ -60,6 +78,9 @@ interface Post {
   content: string;
   author: string;
   author_name: string;
+  author_avatar?: string;
+  author_role?: string;
+  author_is_verified?: boolean;
   tags: TagType[];
   view_count: number;
   score: number;
@@ -75,6 +96,8 @@ interface CommentReply {
   author: string;
   author_name: string;
   author_role: string;
+  author_avatar?: string;
+  author_is_verified?: boolean;
   content: string;
   parent: number;
   is_accepted: boolean;
@@ -90,6 +113,8 @@ interface CommentType {
   author: string;
   author_name: string;
   author_role: string;
+  author_avatar?: string;
+  author_is_verified?: boolean;
   content: string;
   parent: number | null;
   is_accepted: boolean;
@@ -99,12 +124,27 @@ interface CommentType {
   created_at: string;
 }
 
-const getRoleBadge = (role: string) => {
+const getRoleBadge = (role: string, isVerified?: boolean) => {
   if (role === 'LECTURER') {
-    return <Tag color="blue" style={{ fontSize: 11, marginLeft: 6, borderRadius: 3 }}>Giảng viên</Tag>;
+    if (isVerified) {
+      return (
+        <Tag color="processing" style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 11, marginLeft: 6, borderRadius: 3 }}>
+          <CheckCircleFilled style={{ color: '#52c41a' }} /> Giảng viên
+        </Tag>
+      );
+    } else {
+      return (
+        <Tag color="warning" style={{ fontSize: 11, marginLeft: 6, borderRadius: 3 }}>
+          Giảng viên (Chưa xác thực)
+        </Tag>
+      );
+    }
   }
   if (role === 'ADMIN') {
     return <Tag color="red" style={{ fontSize: 11, marginLeft: 6, borderRadius: 3 }}>Admin</Tag>;
+  }
+  if (role === 'STUDENT') {
+    return <Tag color="cyan" style={{ fontSize: 11, marginLeft: 6, borderRadius: 3 }}>Sinh viên</Tag>;
   }
   return null;
 };
@@ -133,7 +173,7 @@ const ReplyItem: React.FC<{ reply: CommentReply; onVote: (id: number, val: numbe
       <div style={{ flex: 1 }}>
         <div style={{ display: 'flex', alignItems: 'center', marginBottom: 4 }}>
           <Text strong style={{ color: '#0074cc', fontSize: 13 }}>{reply.author_name}</Text>
-          {getRoleBadge(reply.author_role)}
+          {getRoleBadge(reply.author_role, reply.author_is_verified)}
           <Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>
             {moment(reply.created_at).fromNow()}
           </Text>
@@ -242,9 +282,36 @@ const CommentItem: React.FC<CommentItemProps> = ({
             padding: '8px 10px',
             fontSize: 12
           }}>
-            <Avatar size="small" style={{ backgroundColor: '#f48024', marginRight: 6 }} icon={<UserOutlined />} />
+            {comment.author_avatar ? (
+              <Avatar 
+                size="small" 
+                src={comment.author_avatar.startsWith('http') ? comment.author_avatar : `http://localhost:8002${comment.author_avatar}`} 
+                style={{ marginRight: 6 }}
+              />
+            ) : comment.author_name ? (
+              <Avatar 
+                size="small" 
+                style={{ 
+                  backgroundColor: comment.author_role === 'LECTURER' ? '#0074cc' : '#f48024', 
+                  fontWeight: 700, 
+                  fontSize: 10,
+                  marginRight: 6,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                {comment.author_name.charAt(0).toUpperCase()}
+              </Avatar>
+            ) : (
+              <Avatar 
+                size="small" 
+                icon={<UserOutlined />} 
+                style={{ marginRight: 6 }}
+              />
+            )}
             <Text strong style={{ color: '#0074cc' }}>{comment.author_name}</Text>
-            {getRoleBadge(comment.author_role)}
+            {getRoleBadge(comment.author_role, comment.author_is_verified)}
             <br />
             <Text type="secondary" style={{ fontSize: 11 }}>trả lời {moment(comment.created_at).fromNow()}</Text>
           </div>
@@ -793,6 +860,8 @@ const PostDetailPage: React.FC = () => {
           display: 'flex',
           alignItems: 'center',
           position: 'fixed',
+          top: 0,
+          left: 0,
           width: '100%',
           zIndex: 1000
         }}>
@@ -858,7 +927,23 @@ const PostDetailPage: React.FC = () => {
                     </Badge>
                   </Popover>
                   <Dropdown menu={{ items: userMenuItems }} placement="bottomRight" arrow>
-                    <Avatar style={{ backgroundColor: '#f48024', cursor: 'pointer' }} icon={<UserOutlined />} />
+                    {user && user.avatar ? (
+                      <Avatar 
+                        src={user.avatar.startsWith('http') ? user.avatar : `${BASE_URL}${user.avatar}`} 
+                        style={{ cursor: 'pointer', border: '1px solid #e3e6e8' }} 
+                      />
+                    ) : user && user.username ? (
+                      <Avatar 
+                        style={{ backgroundColor: '#f48024', cursor: 'pointer', fontWeight: 700, fontSize: 18 }}
+                      >
+                        {user.username.charAt(0).toUpperCase()}
+                      </Avatar>
+                    ) : (
+                      <Avatar 
+                        style={{ backgroundColor: '#f48024', cursor: 'pointer' }} 
+                        icon={<UserOutlined />} 
+                      />
+                    )}
                   </Dropdown>
                 </>
               ) : (
@@ -922,10 +1007,40 @@ const PostDetailPage: React.FC = () => {
                 </Space>
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                   <div style={{ backgroundColor: '#e1ecf4', borderRadius: 4, padding: '8px 10px', fontSize: 12 }}>
-                    <Text type="secondary" style={{ fontSize: 11 }}>đã hỏi {moment(post.created_at).fromNow()}</Text>
-                    <br />
-                    <Avatar size="small" style={{ backgroundColor: '#f48024', marginRight: 6, marginTop: 4 }} icon={<UserOutlined />} />
+                    {post.author_avatar ? (
+                      <Avatar 
+                        size="small" 
+                        src={post.author_avatar.startsWith('http') ? post.author_avatar : `http://localhost:8002${post.author_avatar}`} 
+                        style={{ marginRight: 6 }}
+                      />
+                    ) : post.author_name ? (
+                      <Avatar 
+                        size="small" 
+                        style={{ 
+                          backgroundColor: post.author_role === 'LECTURER' ? '#0074cc' : '#f48024', 
+                          fontWeight: 700, 
+                          fontSize: 10,
+                          marginRight: 6,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                      >
+                        {post.author_name.charAt(0).toUpperCase()}
+                      </Avatar>
+                    ) : (
+                      <Avatar 
+                        size="small" 
+                        icon={<UserOutlined />} 
+                        style={{ marginRight: 6 }}
+                      />
+                    )}
                     <Text strong style={{ color: '#0074cc' }}>{post.author_name}</Text>
+                    {getRoleBadge(post.author_role, post.author_is_verified)}
+                    <br />
+                    <div style={{ marginTop: 4 }}>
+                      <Text type="secondary" style={{ fontSize: 11 }}>đã hỏi {moment(post.created_at).fromNow()}</Text>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1002,7 +1117,7 @@ const PostDetailPage: React.FC = () => {
             style={{
               position: 'fixed',
               bottom: 16,
-              left: 'max(16px, calc(max(0px, (100vw - 1264px) / 2) + 164px - 300px - 16px))',
+              left: 16,
               width: 300,
               background: '#fff',
               borderRadius: 0,
@@ -1026,7 +1141,7 @@ const PostDetailPage: React.FC = () => {
                 <Avatar size={42} style={{ backgroundColor: '#0074cc', flexShrink: 0 }} icon={<UserOutlined />} />
               )
             ) : user && user.avatar ? (
-              <Avatar size={42} src={user.avatar} style={{ flexShrink: 0 }} />
+              <Avatar size={42} src={user.avatar.startsWith('http') ? user.avatar : `${BASE_URL}${user.avatar}`} style={{ flexShrink: 0 }} />
             ) : user && user.username ? (
               <Avatar size={42} style={{ backgroundColor: '#f48024', flexShrink: 0, fontWeight: 700, fontSize: 18 }}>
                 {user.username.charAt(0).toUpperCase()}

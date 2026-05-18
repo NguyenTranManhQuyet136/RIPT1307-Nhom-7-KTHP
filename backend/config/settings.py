@@ -36,7 +36,9 @@ INSTALLED_APPS = [
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
+    'cloudinary_storage',
     'django.contrib.staticfiles',
+    'cloudinary',
     'rest_framework',
     'corsheaders',
     'drf_spectacular',
@@ -46,6 +48,7 @@ INSTALLED_APPS = [
     'tags',
     'comments',
     'notifications',
+    'admin_api',
 ]
 
 MIDDLEWARE = [
@@ -165,3 +168,24 @@ EMAIL_USE_TLS = True
 EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'EduForum <noreply@eduforum.com>')
+
+# Media Files (Uploads)
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+# Cloudinary Configurations (edforum)
+CLOUDINARY_STORAGE = {
+    'CLOUD_NAME': os.getenv('CLOUDINARY_CLOUD_NAME', 'dmgfgyqoo'),
+    'API_KEY': os.getenv('CLOUDINARY_API_KEY', '698636743719821'),
+    'API_SECRET': os.getenv('CLOUDINARY_API_SECRET', 'vRzUQXAyiJF_B_gTAs_JCnIUQfo'),
+}
+
+if CLOUDINARY_STORAGE['API_SECRET']:
+    STORAGES = {
+        "default": {
+            "BACKEND": "cloudinary_storage.storage.MediaCloudinaryStorage",
+        },
+        "staticfiles": {
+            "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+        },
+    }

@@ -41,13 +41,32 @@ import {
   SettingOutlined,
   CheckCircleFilled,
   CloseCircleFilled,
-  ExclamationCircleFilled
+  ExclamationCircleFilled,
+  ClockCircleOutlined
 } from '@ant-design/icons';
 import { history } from 'umi';
 import moment from 'moment';
 import 'moment/locale/vi';
 
 moment.locale('vi');
+moment.updateLocale('vi', {
+  relativeTime: {
+    future: '%s tới',
+    past: '%s trước',
+    s: 'vài giây',
+    ss: '%d giây',
+    m: '1 phút',
+    mm: '%d phút',
+    h: '1 giờ',
+    hh: '%d giờ',
+    d: '1 ngày',
+    dd: '%d ngày',
+    M: '1 tháng',
+    MM: '%d tháng',
+    y: '1 năm',
+    yy: '%d năm'
+  }
+});
 
 const { Header, Content, Sider } = Layout;
 const { Title, Text, Paragraph } = Typography;
@@ -64,12 +83,40 @@ interface Post {
   title: string;
   content: string;
   author_name: string;
+  author_avatar?: string;
+  author_role?: string;
+  author_is_verified?: boolean;
   tags: TagType[];
   comment_count: number;
   view_count: number;
   score: number;
   created_at: string;
 }
+
+const getRoleBadge = (role?: string, isVerified?: boolean) => {
+  if (role === 'LECTURER') {
+    if (isVerified) {
+      return (
+        <Tag color="processing" style={{ display: 'inline-flex', alignItems: 'center', gap: 2, margin: 0, fontSize: 10 }}>
+          <CheckCircleFilled style={{ color: '#52c41a' }} /> Giảng viên
+        </Tag>
+      );
+    } else {
+      return (
+        <Tag color="warning" style={{ margin: 0, fontSize: 10 }}>
+          Giảng viên (Chưa xác thực)
+        </Tag>
+      );
+    }
+  }
+  if (role === 'ADMIN') {
+    return <Tag color="red" style={{ margin: 0, fontSize: 10 }}>Admin</Tag>;
+  }
+  if (role === 'STUDENT') {
+    return <Tag color="cyan" style={{ margin: 0, fontSize: 10 }}>Sinh viên</Tag>;
+  }
+  return null;
+};
 
 const ForumPage: React.FC = () => {
   const [posts, setPosts] = useState<Post[]>([]);
@@ -654,7 +701,8 @@ const ForumPage: React.FC = () => {
   };
 
   const userMenuItems: MenuProps['items'] = [
-    { key: 'profile', icon: <UserOutlined />, label: 'Tài khoản' },
+    ...(user?.role === 'ADMIN' ? [{ key: 'admin', icon: <SettingOutlined />, label: 'Trang quản trị', onClick: () => history.push('/admin') }] : []),
+    { key: 'profile', icon: <UserOutlined />, label: 'Tài khoản', onClick: () => history.push('/forum/profile') },
     { key: 'settings', icon: <SettingOutlined />, label: 'Cài đặt' },
     { type: 'divider' },
     { key: 'logout', icon: <LogoutOutlined />, label: 'Đăng xuất', onClick: handleLogout },
@@ -686,11 +734,14 @@ const ForumPage: React.FC = () => {
           <div style={{ border: '1px solid #5eba7d', borderRadius: 3, padding: '2px 4px', color: '#5eba7d', marginBottom: 8 }}>
             <Text strong style={{ color: '#5eba7d' }}>{post.comment_count}</Text> <Text style={{ fontSize: '12px', color: '#5eba7d' }}>câu trả lời</Text>
           </div>
-          <div style={{ fontSize: 12 }}>
+          <div style={{ fontSize: 12, marginBottom: 4 }}>
             <EyeOutlined /> {post.view_count} lượt xem
           </div>
+          <div style={{ fontSize: 12, color: '#6a737c' }}>
+            <ClockCircleOutlined /> {moment(post.created_at).fromNow()}
+          </div>
         </Col>
-        <Col span={20}>
+        <Col span={20} style={{ display: 'flex', flexDirection: 'column' }}>
           <Title level={4} style={{ marginTop: 0, marginBottom: 4 }}>
             <a
               style={{ color: '#0074cc', fontSize: 17, fontWeight: 400, cursor: 'pointer' }}
@@ -699,10 +750,10 @@ const ForumPage: React.FC = () => {
               {post.title}
             </a>
           </Title>
-          <Paragraph ellipsis={{ rows: 2 }} style={{ color: '#3c4146', marginBottom: 8 }}>
+          <Paragraph ellipsis={{ rows: 2 }} style={{ color: '#3c4146', marginBottom: 8, flexGrow: 1 }}>
             {post.content}
           </Paragraph>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', paddingTop: 4 }}>
             <Space size={4}>
               {post.tags.map(t => (
                 <Tag 
@@ -719,10 +770,35 @@ const ForumPage: React.FC = () => {
                 </Tag>
               ))}
             </Space>
-            <div style={{ fontSize: 12, color: '#6a737c', marginLeft: 'auto' }}>
-              <Avatar size="small" icon={<UserOutlined />} style={{ marginRight: 4 }} />
+             <div style={{ fontSize: 12, color: '#6a737c', marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+              {post.author_avatar ? (
+                <Avatar 
+                  size="small" 
+                  src={post.author_avatar.startsWith('http') ? post.author_avatar : `http://localhost:8002${post.author_avatar}`} 
+                />
+              ) : post.author_name ? (
+                <Avatar 
+                  size="small" 
+                  style={{ 
+                    backgroundColor: post.author_role === 'LECTURER' ? '#0074cc' : '#f48024', 
+                    fontWeight: 700, 
+                    fontSize: 10,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  {post.author_name.charAt(0).toUpperCase()}
+                </Avatar>
+              ) : (
+                <Avatar 
+                  size="small" 
+                  icon={<UserOutlined />} 
+                />
+              )}
               <Text strong style={{ color: '#0074cc' }}>{post.author_name}</Text>
-              <Text style={{ marginLeft: 4 }}>hỏi {moment(post.created_at).fromNow()}</Text>
+              
+              {getRoleBadge(post.author_role, post.author_is_verified)}
             </div>
           </div>
         </Col>
@@ -837,6 +913,8 @@ const ForumPage: React.FC = () => {
           display: 'flex',
           alignItems: 'center',
           position: 'fixed',
+          top: 0,
+          left: 0,
           width: '100%',
           zIndex: 1000
         }}>
@@ -982,10 +1060,23 @@ const ForumPage: React.FC = () => {
                   </Badge>
                 </Popover>
                   <Dropdown menu={{ items: userMenuItems }} placement="bottomRight" arrow>
-                    <Avatar 
-                      style={{ backgroundColor: '#f48024', cursor: 'pointer' }} 
-                      icon={<UserOutlined />} 
-                    />
+                    {user && user.avatar ? (
+                      <Avatar 
+                        src={user.avatar.startsWith('http') ? user.avatar : `${BASE_URL}${user.avatar}`} 
+                        style={{ cursor: 'pointer', border: '1px solid #e3e6e8' }} 
+                      />
+                    ) : user && user.username ? (
+                      <Avatar 
+                        style={{ backgroundColor: '#f48024', cursor: 'pointer', fontWeight: 700, fontSize: 18 }}
+                      >
+                        {user.username.charAt(0).toUpperCase()}
+                      </Avatar>
+                    ) : (
+                      <Avatar 
+                        style={{ backgroundColor: '#f48024', cursor: 'pointer' }} 
+                        icon={<UserOutlined />} 
+                      />
+                    )}
                   </Dropdown>
                 </>
               ) : (
@@ -1206,7 +1297,7 @@ const ForumPage: React.FC = () => {
             style={{
               position: 'fixed',
               bottom: 16,
-              left: 'max(16px, calc(max(0px, (100vw - 1264px) / 2) + 164px - 300px - 16px))',
+              left: 16,
               width: 300,
               background: '#fff',
               borderRadius: 0,
@@ -1230,7 +1321,7 @@ const ForumPage: React.FC = () => {
                 <Avatar size={42} style={{ backgroundColor: '#0074cc', flexShrink: 0 }} icon={<UserOutlined />} />
               )
             ) : user && user.avatar ? (
-              <Avatar size={42} src={user.avatar} style={{ flexShrink: 0 }} />
+              <Avatar size={42} src={user.avatar.startsWith('http') ? user.avatar : `${BASE_URL}${user.avatar}`} style={{ flexShrink: 0 }} />
             ) : user && user.username ? (
               <Avatar size={42} style={{ backgroundColor: '#f48024', flexShrink: 0, fontWeight: 700, fontSize: 18 }}>
                 {user.username.charAt(0).toUpperCase()}

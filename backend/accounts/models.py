@@ -23,6 +23,8 @@ class User(AbstractUser):
     
     profile_url = models.URLField(max_length=500, blank=True, null=True, verbose_name="Link hồ sơ giảng dạy")
     is_verified_lecturer = models.BooleanField(default=False, verbose_name="Giảng viên đã xác thực")
+    is_verified = models.BooleanField(default=False, verbose_name="Đã duyệt/xác thực tài khoản")
+    evidence_img = models.ImageField(upload_to='evidence/', null=True, blank=True, verbose_name="Ảnh minh chứng")
     
     avatar = models.ImageField(upload_to='avatars/', null=True, blank=True)
     bio = models.TextField(max_length=500, blank=True)

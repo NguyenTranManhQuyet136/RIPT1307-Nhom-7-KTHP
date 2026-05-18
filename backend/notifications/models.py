@@ -6,6 +6,7 @@ class Notification(models.Model):
         ('WELCOME', 'Welcome'),
         ('REPLY_POST', 'Reply Post'),
         ('REPLY_COMMENT', 'Reply Comment'),
+        ('NEW_POST', 'New Post'),
     )
 
     # Người nhận thông báo (chủ bài viết, chủ bình luận hoặc người mới đăng ký)
