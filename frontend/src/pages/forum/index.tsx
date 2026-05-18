@@ -24,7 +24,8 @@ import {
   Tooltip,
   Dropdown,
   Select,
-  Popover
+  Popover,
+  Spin
 } from 'antd';
 import type { MenuProps } from 'antd';
 import { 
@@ -83,6 +84,7 @@ interface Post {
   title: string;
   content: string;
   author_name: string;
+  author_username?: string;
   author_avatar?: string;
   author_role?: string;
   author_is_verified?: boolean;
@@ -90,6 +92,7 @@ interface Post {
   comment_count: number;
   view_count: number;
   score: number;
+  is_edited?: boolean;
   created_at: string;
 }
 
@@ -123,6 +126,7 @@ const ForumPage: React.FC = () => {
   const [tags, setTags] = useState<TagType[]>([]);
   const [loading, setLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingPostId, setEditingPostId] = useState<number | null>(null);
   const [form] = Form.useForm();
   const [user, setUser] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -138,6 +142,11 @@ const ForumPage: React.FC = () => {
   const [notificationLimit, setNotificationLimit] = useState<number>(10);
   const notifiedIdsRef = React.useRef<Set<number>>(new Set());
   const isFirstLoadRef = React.useRef(true);
+  const [activeTab, setActiveTab] = useState('home');
+  const [lecturers, setLecturers] = useState<any[]>([]);
+  const [lecturersLoading, setLecturersLoading] = useState(false);
+  const [tagSearch, setTagSearch] = useState('');
+  const [lecturerSearch, setLecturerSearch] = useState('');
   const [activeToast, setActiveToast] = useState<{ id: any; type: string; message: string; target_post_id?: any } | null>(null);
 
   const showSuccess = (msg: string) => {
@@ -205,6 +214,20 @@ const ForumPage: React.FC = () => {
       setTags(data.slice(0, 10));
     } catch (error) {
       console.error('Lỗi tải tags', error);
+    }
+  };
+
+  const fetchLecturers = async () => {
+    setLecturersLoading(true);
+    try {
+      const res = await fetch(`${BASE_URL}/api/auth/lecturers/verified/`);
+      const data = await res.json();
+      setLecturers(data);
+    } catch (e) {
+      console.error(e);
+      showError('Không thể tải danh sách giảng viên');
+    } finally {
+      setLecturersLoading(false);
     }
   };
 
@@ -345,10 +368,16 @@ const ForumPage: React.FC = () => {
     }
   }, [activeToast]);
 
+  useEffect(() => {
+    if (activeTab === 'lecturers') {
+      fetchLecturers();
+    }
+  }, [activeTab]);
+
   const handleCreatePost = async (values: any) => {
     const token = localStorage.getItem('access_token');
     if (!token) {
-      showWarning('Vui lòng đăng nhập để đăng bài');
+      showWarning('Vui lòng đăng nhập để tiếp tục');
       history.push('/auth');
       return;
     }
@@ -356,8 +385,11 @@ const ForumPage: React.FC = () => {
     setLoading(true);
     try {
       const tag_names = values.tags ? values.tags.split(',').map((t: string) => t.trim()) : [];
-      const res = await fetch(`${BASE_URL}/api/posts/`, {
-        method: 'POST',
+      const url = editingPostId ? `${BASE_URL}/api/posts/${editingPostId}/` : `${BASE_URL}/api/posts/`;
+      const method = editingPostId ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method: method,
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
@@ -370,19 +402,65 @@ const ForumPage: React.FC = () => {
       });
 
       if (res.ok) {
-        showSuccess('Đăng bài thành công! Câu hỏi của bạn đã được đăng công khai trên diễn đàn.');
+        showSuccess(editingPostId ? 'Cập nhật bài viết thành công!' : 'Đăng bài thành công! Câu hỏi của bạn đã được đăng công khai trên diễn đàn.');
         setIsModalOpen(false);
+        setEditingPostId(null);
         form.resetFields();
         fetchData();
         fetchTags();
       } else {
-        showError('Có lỗi xảy ra khi đăng bài');
+        showError(editingPostId ? 'Có lỗi xảy ra khi cập nhật bài viết' : 'Có lỗi xảy ra khi đăng bài');
       }
     } catch (error) {
       showError('Lỗi kết nối server');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleStartEditPost = (post: Post) => {
+    setEditingPostId(post.id);
+    form.setFieldsValue({
+      title: post.title,
+      content: post.content,
+      tags: post.tags.map(t => t.name).join(', ')
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleDeletePost = (postId: number) => {
+    Modal.confirm({
+      title: 'Xác nhận xóa bài viết',
+      content: 'Bạn có chắc chắn muốn xóa bài viết này không? Hành động này không thể hoàn tác.',
+      okText: 'Xóa',
+      okType: 'danger',
+      cancelText: 'Hủy',
+      onOk: async () => {
+        const token = localStorage.getItem('access_token');
+        if (!token) {
+          showError('Phiên đăng nhập đã hết hạn');
+          return;
+        }
+        try {
+          const res = await fetch(`${BASE_URL}/api/posts/${postId}/`, {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
+          if (res.ok) {
+            showSuccess('Xóa bài viết thành công!');
+            fetchData();
+            fetchTags();
+          } else {
+            showError('Không thể xóa bài viết này');
+          }
+        } catch (e) {
+          console.error(e);
+          showError('Lỗi kết nối server');
+        }
+      }
+    });
   };
 
   const handleLogout = () => {
@@ -708,7 +786,7 @@ const ForumPage: React.FC = () => {
     { key: 'logout', icon: <LogoutOutlined />, label: 'Đăng xuất', onClick: handleLogout },
   ];
 
-  const PostItem = ({ post }: { post: Post }) => (
+  const PostItem = ({ post, isMyQuestionsTab }: { post: Post; isMyQuestionsTab?: boolean }) => (
     <div style={{ padding: '16px 0', borderBottom: '1px solid #eff0f1' }}>
       <Row gutter={16}>
         <Col span={4} style={{ textAlign: 'right', color: '#6a737c' }}>
@@ -742,64 +820,91 @@ const ForumPage: React.FC = () => {
           </div>
         </Col>
         <Col span={20} style={{ display: 'flex', flexDirection: 'column' }}>
-          <Title level={4} style={{ marginTop: 0, marginBottom: 4 }}>
-            <a
-              style={{ color: '#0074cc', fontSize: 17, fontWeight: 400, cursor: 'pointer' }}
-              onClick={() => history.push(`/forum/post/${post.id}`)}
-            >
-              {post.title}
-            </a>
-          </Title>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%' }}>
+            <Title level={4} style={{ marginTop: 0, marginBottom: 4, flex: 1, marginRight: 16 }}>
+              <a
+                style={{ color: '#0074cc', fontSize: 17, fontWeight: 400, cursor: 'pointer' }}
+                onClick={() => history.push(`/forum/post/${post.id}`)}
+              >
+                {post.title}
+              </a>
+            </Title>
+            {post.is_edited && (
+              <span style={{ fontSize: 11, fontStyle: 'italic', color: '#f48024', backgroundColor: '#fff8f2', padding: '1px 6px', borderRadius: 4, border: '1px solid #fce3cf', userSelect: 'none', flexShrink: 0 }}>
+                đã chỉnh sửa
+              </span>
+            )}
+          </div>
           <Paragraph ellipsis={{ rows: 2 }} style={{ color: '#3c4146', marginBottom: 8, flexGrow: 1 }}>
             {post.content}
           </Paragraph>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', paddingTop: 4 }}>
-            <Space size={4}>
-              {post.tags.map(t => (
-                <Tag 
-                  key={t.id} 
-                  style={{ 
-                    backgroundColor: '#e1ecf4', 
-                    color: '#39739d', 
-                    border: 'none', 
-                    cursor: 'pointer' 
-                  }}
-                  onClick={() => filterByTag(t.slug)}
-                >
-                  {t.name}
-                </Tag>
-              ))}
-            </Space>
-             <div style={{ fontSize: 12, color: '#6a737c', marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
-              {post.author_avatar ? (
-                <Avatar 
-                  size="small" 
-                  src={post.author_avatar.startsWith('http') ? post.author_avatar : `http://localhost:8002${post.author_avatar}`} 
-                />
-              ) : post.author_name ? (
-                <Avatar 
-                  size="small" 
-                  style={{ 
-                    backgroundColor: post.author_role === 'LECTURER' ? '#0074cc' : '#f48024', 
-                    fontWeight: 700, 
-                    fontSize: 10,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}
-                >
-                  {post.author_name.charAt(0).toUpperCase()}
-                </Avatar>
-              ) : (
-                <Avatar 
-                  size="small" 
-                  icon={<UserOutlined />} 
-                />
-              )}
-              <Text strong style={{ color: '#0074cc' }}>{post.author_name}</Text>
-              
-              {getRoleBadge(post.author_role, post.author_is_verified)}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <Space size={4}>
+                {post.tags.map(t => (
+                  <Tag 
+                    key={t.id} 
+                    style={{ 
+                      backgroundColor: '#e1ecf4', 
+                      color: '#39739d', 
+                      border: 'none', 
+                      cursor: 'pointer' 
+                    }}
+                    onClick={() => filterByTag(t.slug)}
+                  >
+                    {t.name}
+                  </Tag>
+                ))}
+              </Space>
             </div>
+            {isMyQuestionsTab ? (
+              <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
+                <a 
+                  style={{ color: '#0074cc', fontSize: 13, fontWeight: 500 }}
+                  onClick={() => handleStartEditPost(post)}
+                >
+                  Chỉnh sửa
+                </a>
+                <span style={{ color: '#d6d9dc' }}>|</span>
+                <a 
+                  style={{ color: '#c02d2d', fontSize: 13, fontWeight: 500 }}
+                  onClick={() => handleDeletePost(post.id)}
+                >
+                  Xóa
+                </a>
+              </div>
+            ) : (
+              <div style={{ fontSize: 12, color: '#6a737c', marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+                {post.author_avatar ? (
+                  <Avatar 
+                    size="small" 
+                    src={post.author_avatar.startsWith('http') ? post.author_avatar : `http://localhost:8002${post.author_avatar}`} 
+                  />
+                ) : post.author_name ? (
+                  <Avatar 
+                    size="small" 
+                    style={{ 
+                      backgroundColor: post.author_role === 'LECTURER' ? '#0074cc' : '#f48024', 
+                      fontWeight: 700, 
+                      fontSize: 10,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                  >
+                    {post.author_name.charAt(0).toUpperCase()}
+                  </Avatar>
+                ) : (
+                  <Avatar 
+                    size="small" 
+                    icon={<UserOutlined />} 
+                  />
+                )}
+                <Text strong style={{ color: '#0074cc' }}>{post.author_name}</Text>
+                
+                {getRoleBadge(post.author_role, post.author_is_verified)}
+              </div>
+            )}
           </div>
         </Col>
       </Row>
@@ -1090,158 +1195,367 @@ const ForumPage: React.FC = () => {
         </Header>
 
         <Layout style={{ marginTop: 56, maxWidth: 1264, margin: '56px auto 0', width: '100%', background: '#fff' }}>
-          <Sider width={164} style={{ background: '#fff', borderRight: '1px solid #e3e6e8', position: 'fixed', height: 'calc(100vh - 56px)', left: 'auto' }}>
+          <Sider width={210} style={{ background: '#fff', borderRight: '1px solid #e3e6e8', position: 'fixed', height: 'calc(100vh - 56px)', left: 'auto' }}>
             <Menu
               mode="inline"
-              defaultSelectedKeys={['home']}
+              selectedKeys={[activeTab]}
+              onClick={({ key }) => {
+                setActiveTab(key);
+              }}
               style={{ height: '100%', borderRight: 0, paddingTop: 24 }}
               items={[
                 { key: 'home', icon: <GlobalOutlined />, label: 'Trang chủ' },
-                { key: 'public', label: 'CỘNG ĐỒNG', type: 'group', children: [
-                  { key: 'questions', icon: <QuestionCircleOutlined />, label: 'Câu hỏi' },
-                  { key: 'tags', icon: <TagsOutlined />, label: 'Thẻ (Tags)' },
-                  { key: 'users', icon: <UserOutlined />, label: 'Người dùng' },
-                ]}
+                { key: 'tags', icon: <TagsOutlined />, label: 'Thẻ phổ biến' },
+                { key: 'lecturers', icon: <UserOutlined />, label: 'Đội ngũ giảng viên' },
+                { key: 'my-questions', icon: <QuestionCircleOutlined />, label: 'Câu hỏi của tôi' },
               ]}
             />
           </Sider>
 
-          <Content style={{ padding: '24px', marginLeft: 164, minHeight: 280, background: '#fff' }}>
-            <div style={{ marginBottom: 24 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Title level={2} style={{ margin: 0, fontWeight: 400 }}>
-                  {fullSearchText ? (
-                    <>
-                      Kết quả cho: <span style={{ fontWeight: 600 }}>"{fullSearchText.length > 50 ? fullSearchText.substring(0, 50) + '...' : fullSearchText}"</span>
-                    </>
-                  ) : (
-                    'Tất cả câu hỏi'
-                  )}
-                </Title>
-                <Button 
-                  type="primary" 
-                  size="large" 
-                  icon={<PlusOutlined />} 
-                  onClick={() => setIsModalOpen(true)}
-                  style={{ boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.4)' }}
-                >
-                  Đặt câu hỏi
-                </Button>
-              </div>
-              {selectedTags.length > 0 && (
-                <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {selectedTags.map(tag => (
-                    <Tag 
-                      key={tag} 
-                      color="#e1ecf4" 
-                      style={{ 
-                        border: 'none', 
-                        color: '#39739d', 
-                        fontWeight: 500, 
-                        padding: '2px 8px', 
-                        borderRadius: '3px',
-                        fontSize: '13px'
-                      }}
+          <Content style={{ padding: '24px', marginLeft: 210, minHeight: 280, background: '#fff' }}>
+            {activeTab === 'home' && (
+              <>
+                <div style={{ marginBottom: 24 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Title level={2} style={{ margin: 0, fontWeight: 400 }}>
+                      {fullSearchText ? (
+                        <>
+                          Kết quả cho: <span style={{ fontWeight: 600 }}>"{fullSearchText.length > 50 ? fullSearchText.substring(0, 50) + '...' : fullSearchText}"</span>
+                        </>
+                      ) : (
+                        'Tất cả câu hỏi'
+                      )}
+                    </Title>
+                    <Button 
+                      type="primary" 
+                      size="large" 
+                      icon={<PlusOutlined />} 
+                      onClick={() => setIsModalOpen(true)}
+                      style={{ boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.4)' }}
                     >
-                      #{tag}
-                    </Tag>
-                  ))}
+                      Đặt câu hỏi
+                    </Button>
+                  </div>
+                  {selectedTags.length > 0 && (
+                    <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {selectedTags.map(tag => (
+                        <Tag 
+                          key={tag} 
+                          color="#e1ecf4" 
+                          style={{ 
+                            border: 'none', 
+                            color: '#39739d', 
+                            fontWeight: 500, 
+                            padding: '2px 8px', 
+                            borderRadius: '3px',
+                            fontSize: '13px'
+                          }}
+                        >
+                          #{tag}
+                        </Tag>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <Text style={{ fontSize: 18 }}>{posts.length} câu hỏi</Text>
-              <Space.Compact block={false}>
-                <Button 
-                  type={ordering === '-created_at' ? 'primary' : 'default'}
-                  onClick={() => handleOrderingChange('-created_at')}
-                >
-                  Mới nhất
-                </Button>
-                <Button 
-                  type={ordering === '-view_count' ? 'primary' : 'default'}
-                  onClick={() => handleOrderingChange('-view_count')}
-                >
-                  Phổ biến
-                </Button>
-                <Button 
-                  type={unanswered ? 'primary' : 'default'}
-                  onClick={toggleUnanswered}
-                >
-                  Chưa trả lời
-                </Button>
-              </Space.Compact>
-            </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                  <Text style={{ fontSize: 18 }}>{posts.length} câu hỏi</Text>
+                  <Space.Compact block={false}>
+                    <Button 
+                      type={ordering === '-created_at' ? 'primary' : 'default'}
+                      onClick={() => handleOrderingChange('-created_at')}
+                    >
+                      Mới nhất
+                    </Button>
+                    <Button 
+                      type={ordering === '-view_count' ? 'primary' : 'default'}
+                      onClick={() => handleOrderingChange('-view_count')}
+                    >
+                      Phổ biến
+                    </Button>
+                    <Button 
+                      type={unanswered ? 'primary' : 'default'}
+                      onClick={toggleUnanswered}
+                    >
+                      Chưa trả lời
+                    </Button>
+                  </Space.Compact>
+                </div>
 
-            <Divider style={{ margin: '0 0 0 0' }} />
+                <Divider style={{ margin: '0 0 0 0' }} />
 
-            {loading ? (
-              <List loading={true} />
-            ) : posts.length > 0 ? (
-              posts.map(post => <PostItem key={post.id} post={post} />)
-            ) : (
-              <Empty description="Chưa có câu hỏi nào. Hãy là người đầu tiên đặt câu hỏi!" style={{ marginTop: 64 }} />
+                {loading ? (
+                  <List loading={true} />
+                ) : posts.length > 0 ? (
+                  posts.map(post => <PostItem key={post.id} post={post} />)
+                ) : (
+                  <Empty description="Chưa có câu hỏi nào. Hãy là người đầu tiên đặt câu hỏi!" style={{ marginTop: 64 }} />
+                )}
+              </>
+            )}
+
+            {activeTab === 'tags' && (
+              <div>
+                <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Title level={2} style={{ margin: 0, fontWeight: 400 }}>Thẻ phổ biến</Title>
+                  <Input
+                    placeholder="Tìm kiếm thẻ..."
+                    prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />}
+                    style={{ width: 250 }}
+                    onChange={e => setTagSearch(e.target.value)}
+                  />
+                </div>
+                <Paragraph style={{ color: '#525960', fontSize: 15, marginBottom: 24 }}>
+                  Thẻ là một danh mục giúp nhóm các câu hỏi có cùng chủ đề lại với nhau. Hãy click vào một thẻ để xem các câu hỏi liên quan.
+                </Paragraph>
+                <Row gutter={[16, 16]}>
+                  {tags.filter(t => t.name.toLowerCase().includes(tagSearch.toLowerCase())).map(t => (
+                    <Col span={8} key={t.id}>
+                      <Card
+                        hoverable
+                        style={{ borderColor: '#e3e6e8', borderRadius: 6 }}
+                        bodyStyle={{ padding: '16px' }}
+                        onClick={() => {
+                          filterByTag(t.slug);
+                          setActiveTab('home');
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <Tag color="#e1ecf4" style={{ border: 'none', color: '#39739d', fontWeight: 600, fontSize: 14, padding: '2px 8px', margin: 0 }}>
+                            {t.name}
+                          </Tag>
+                          <Text type="secondary" style={{ fontSize: 13 }}>
+                            {t.post_count} bài viết
+                          </Text>
+                        </div>
+                      </Card>
+                    </Col>
+                  ))}
+                  {tags.filter(t => t.name.toLowerCase().includes(tagSearch.toLowerCase())).length === 0 && (
+                    <Col span={24}>
+                      <Empty description="Không tìm thấy thẻ nào khớp với từ khóa tìm kiếm" />
+                    </Col>
+                  )}
+                </Row>
+              </div>
+            )}
+
+            {activeTab === 'lecturers' && (
+              <div>
+                <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Title level={2} style={{ margin: 0, fontWeight: 400 }}>Đội ngũ Giảng viên</Title>
+                  <Input
+                    placeholder="Tìm kiếm giảng viên, chuyên ngành..."
+                    prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />}
+                    style={{ width: 280 }}
+                    onChange={e => setLecturerSearch(e.target.value)}
+                  />
+                </div>
+                <Paragraph style={{ color: '#525960', fontSize: 15, marginBottom: 24 }}>
+                  Danh sách các Thầy/Cô cố vấn chuyên môn đã được EduForum xác thực tài khoản. Giảng viên luôn sẵn sàng giải đáp các câu hỏi học thuật từ sinh viên.
+                </Paragraph>
+                {lecturersLoading ? (
+                  <div style={{ textAlign: 'center', padding: '48px 0' }}>
+                    <Spin size="large" tip="Đang tải danh sách giảng viên..." />
+                  </div>
+                ) : (
+                  <Row gutter={[20, 20]}>
+                    {lecturers.filter(l => 
+                      (l.full_name || l.username).toLowerCase().includes(lecturerSearch.toLowerCase()) ||
+                      (l.major || '').toLowerCase().includes(lecturerSearch.toLowerCase()) ||
+                      (l.university || '').toLowerCase().includes(lecturerSearch.toLowerCase())
+                    ).map(l => (
+                      <Col span={8} key={l.id}>
+                        <Card
+                          hoverable
+                          style={{ 
+                            borderColor: '#e3e6e8', 
+                            borderRadius: 8, 
+                            height: '100%', 
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+                            textAlign: 'center'
+                          }}
+                          bodyStyle={{ padding: '24px 16px' }}
+                        >
+                          <div style={{ position: 'relative', display: 'inline-block', marginBottom: 16 }}>
+                            <Avatar 
+                              size={80} 
+                              src={l.avatar} 
+                              icon={<UserOutlined />} 
+                              style={{ border: '3px solid #f48024', boxShadow: '0 2px 8px rgba(244,128,36,0.2)' }}
+                            />
+                            <CheckCircleFilled 
+                              style={{ 
+                                color: '#52c41a', 
+                                fontSize: 20, 
+                                position: 'absolute', 
+                                bottom: 2, 
+                                right: 2, 
+                                backgroundColor: '#fff', 
+                                borderRadius: '50%',
+                                padding: 1
+                              }} 
+                            />
+                          </div>
+                          <Title level={4} style={{ margin: '0 0 4px 0', fontSize: 16, fontWeight: 600 }}>
+                            {l.full_name || l.username}
+                          </Title>
+                          <Tag color="processing" style={{ marginBottom: 12, borderRadius: 4 }}>
+                            Giảng viên xác thực
+                          </Tag>
+                          <Divider style={{ margin: '12px 0' }} />
+                          <div style={{ textAlign: 'left', marginBottom: 16 }}>
+                            <Paragraph style={{ margin: '0 0 6px 0', fontSize: 13 }}>
+                              🏫 <Text strong>Trường:</Text> <span style={{ textTransform: 'capitalize' }}>{l.university || 'N/A'}</span>
+                            </Paragraph>
+                            <Paragraph style={{ margin: '0 0 6px 0', fontSize: 13 }}>
+                              📖 <Text strong>Chuyên ngành:</Text> <span style={{ textTransform: 'capitalize' }}>{l.major || 'Chung'}</span>
+                            </Paragraph>
+                            <Paragraph style={{ margin: '0 0 6px 0', fontSize: 13 }}>
+                              💬 <Text strong>Lượt hỗ trợ:</Text> <Text type="warning" strong>{l.total_answers || 0} câu trả lời</Text>
+                            </Paragraph>
+                          </div>
+                          <Button 
+                            type="primary" 
+                            ghost 
+                            style={{ width: '100%', borderRadius: 4, borderColor: '#f48024', color: '#f48024' }}
+                            onClick={() => {
+                              setIsModalOpen(true);
+                              form.setFieldsValue({
+                                title: `[Hỏi Thầy/Cô ${l.full_name || l.username}] `,
+                              });
+                            }}
+                          >
+                            Đặt câu hỏi trực tiếp
+                          </Button>
+                        </Card>
+                      </Col>
+                    ))}
+                    {lecturers.filter(l => 
+                      (l.full_name || l.username).toLowerCase().includes(lecturerSearch.toLowerCase()) ||
+                      (l.major || '').toLowerCase().includes(lecturerSearch.toLowerCase()) ||
+                      (l.university || '').toLowerCase().includes(lecturerSearch.toLowerCase())
+                    ).length === 0 && (
+                      <Col span={24}>
+                        <Empty description="Không tìm thấy giảng viên nào phù hợp" />
+                      </Col>
+                    )}
+                  </Row>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'my-questions' && (
+              <div>
+                {!user ? (
+                  <Card style={{ textAlign: 'center', padding: '48px 24px', maxWidth: 500, margin: '64px auto', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+                    <div style={{ fontSize: 48, color: '#f48024', marginBottom: 16 }}>
+                      <QuestionCircleOutlined />
+                    </div>
+                    <Title level={3}>Câu hỏi của bạn</Title>
+                    <Paragraph type="secondary" style={{ fontSize: 14, marginBottom: 24 }}>
+                      Vui lòng đăng nhập vào tài khoản EduForum của bạn để theo dõi, quản lý và nhận thông báo phản hồi cho các câu hỏi học tập của mình.
+                    </Paragraph>
+                    <Button type="primary" size="large" onClick={() => history.push('/auth')} style={{ padding: '0 32px' }}>
+                      Đăng nhập ngay
+                    </Button>
+                  </Card>
+                ) : (
+                  <>
+                    <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Title level={2} style={{ margin: 0, fontWeight: 400 }}>Câu hỏi của tôi</Title>
+                      <Button 
+                        type="primary" 
+                        size="large" 
+                        icon={<PlusOutlined />} 
+                        onClick={() => setIsModalOpen(true)}
+                        style={{ boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.4)' }}
+                      >
+                        Đặt câu hỏi
+                      </Button>
+                    </div>
+                    <Divider style={{ margin: '0 0 16px 0' }} />
+                    {loading ? (
+                      <List loading={true} />
+                    ) : posts.filter(post => post.author_username === user.username).length > 0 ? (
+                      posts.filter(post => post.author_username === user.username).map(post => <PostItem key={post.id} post={post} isMyQuestionsTab={true} />)
+                    ) : (
+                      <Empty description="Bạn chưa đăng câu hỏi nào. Hãy đặt câu hỏi học thuật đầu tiên của mình nhé!" style={{ marginTop: 64 }} />
+                    )}
+                  </>
+                )}
+              </div>
             )}
           </Content>
 
-          <Sider width={300} style={{ background: '#fff', padding: '24px 0 24px 24px' }}>
-            <Card 
-              title={<span style={{ display: 'flex', alignItems: 'center' }}><TagsOutlined style={{ marginRight: 8 }} /> Thẻ phổ biến</span>}
-              size="small"
-              bordered={true}
-              style={{ backgroundColor: '#fdf7e2', borderColor: '#f1e5bc' }}
-              headStyle={{ backgroundColor: '#fbf3d5', borderBottom: '1px solid #f1e5bc' }}
-            >
-              <Space wrap size={[4, 8]}>
-                {tags.map(t => (
-                  <Tag 
-                    key={t.id} 
-                    style={{ 
-                      backgroundColor: '#e1ecf4', 
-                      color: '#39739d', 
-                      border: 'none', 
-                      cursor: 'pointer',
-                      margin: '2px' 
-                    }}
-                    onClick={() => filterByTag(t.slug)}
-                  >
-                    {t.name} x {t.post_count}
-                  </Tag>
-                ))}
-              </Space>
-              <div style={{ marginTop: 12 }}>
-                <Button type="link" style={{ padding: 0 }} onClick={() => filterByTag(null)}>Xem tất cả thẻ</Button>
-              </div>
-            </Card>
+          {(activeTab === 'home' || activeTab === 'my-questions') && (
+            <Sider width={300} style={{ background: '#fff', padding: '24px 0 24px 24px' }}>
+              <Card 
+                title={<span style={{ display: 'flex', alignItems: 'center' }}><TagsOutlined style={{ marginRight: 8 }} /> Thẻ phổ biến</span>}
+                size="small"
+                bordered={true}
+                style={{ backgroundColor: '#fdf7e2', borderColor: '#f1e5bc' }}
+                headStyle={{ backgroundColor: '#fbf3d5', borderBottom: '1px solid #f1e5bc' }}
+              >
+                <Space wrap size={[4, 8]}>
+                  {tags.map(t => (
+                    <Tag 
+                      key={t.id} 
+                      style={{ 
+                        backgroundColor: '#e1ecf4', 
+                        color: '#39739d', 
+                        border: 'none', 
+                        cursor: 'pointer',
+                        margin: '2px' 
+                      }}
+                      onClick={() => {
+                        filterByTag(t.slug);
+                        setActiveTab('home');
+                      }}
+                    >
+                      {t.name} x {t.post_count}
+                    </Tag>
+                  ))}
+                </Space>
+                <div style={{ marginTop: 12 }}>
+                  <Button type="link" style={{ padding: 0 }} onClick={() => setActiveTab('tags')}>Xem tất cả thẻ</Button>
+                </div>
+              </Card>
 
-            <Card 
-              title="Thống kê diễn đàn" 
-              size="small" 
-              style={{ marginTop: 16 }}
-            >
-              <List size="small">
-                <List.Item>
-                  <Text type="secondary">Tổng số câu hỏi:</Text> <Text strong>{posts.length}</Text>
-                </List.Item>
-                <List.Item>
-                  <Text type="secondary">Thành viên:</Text> <Text strong>128</Text>
-                </List.Item>
-              </List>
-            </Card>
-          </Sider>
+              <Card 
+                title="Thống kê diễn đàn" 
+                size="small" 
+                style={{ marginTop: 16 }}
+              >
+                <List size="small">
+                  <List.Item>
+                    <Text type="secondary">Tổng số câu hỏi:</Text> <Text strong>{posts.length}</Text>
+                  </List.Item>
+                  <List.Item>
+                    <Text type="secondary">Thành viên:</Text> <Text strong>128</Text>
+                  </List.Item>
+                </List>
+              </Card>
+            </Sider>
+          )}
         </Layout>
 
         <Modal
-          title={<Title level={3} style={{ margin: 0 }}>Đặt câu hỏi cho cộng đồng</Title>}
+          title={<Title level={3} style={{ margin: 0 }}>{editingPostId ? 'Chỉnh sửa câu hỏi' : 'Đặt câu hỏi cho cộng đồng'}</Title>}
           open={isModalOpen}
-          onCancel={() => setIsModalOpen(false)}
+          onCancel={() => {
+            setIsModalOpen(false);
+            setEditingPostId(null);
+            form.resetFields();
+          }}
           footer={null}
           width={800}
           centered
         >
           <Paragraph type="secondary">
-            Hãy mô tả chi tiết vấn đề của bạn. Một câu hỏi tốt sẽ nhận được câu trả lời nhanh và chính xác hơn.
+            {editingPostId 
+              ? 'Cập nhật lại các thông tin cần thiết cho câu hỏi của bạn.' 
+              : 'Hãy mô tả chi tiết vấn đề của bạn. Một câu hỏi tốt sẽ nhận được câu trả lời nhanh và chính xác hơn.'}
           </Paragraph>
           <Form
             form={form}
@@ -1276,9 +1590,15 @@ const ForumPage: React.FC = () => {
 
             <div style={{ textAlign: 'right', marginTop: 24 }}>
               <Space>
-                <Button onClick={() => setIsModalOpen(false)}>Hủy</Button>
+                <Button onClick={() => {
+                  setIsModalOpen(false);
+                  setEditingPostId(null);
+                  form.resetFields();
+                }}>
+                  Hủy
+                </Button>
                 <Button type="primary" htmlType="submit" size="large" loading={loading}>
-                  Đăng câu hỏi
+                  {editingPostId ? 'Cập nhật' : 'Đăng câu hỏi'}
                 </Button>
               </Space>
             </div>

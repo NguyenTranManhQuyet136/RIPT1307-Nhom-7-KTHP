@@ -78,6 +78,7 @@ interface Post {
   content: string;
   author: string;
   author_name: string;
+  author_username?: string;
   author_avatar?: string;
   author_role?: string;
   author_is_verified?: boolean;
@@ -101,6 +102,8 @@ interface CommentReply {
   content: string;
   parent: number;
   is_accepted: boolean;
+  accepted_by_author?: boolean;
+  accepted_by_lecturer?: boolean;
   score: number;
   user_vote: number;
   replies: CommentReply[];
@@ -118,6 +121,8 @@ interface CommentType {
   content: string;
   parent: number | null;
   is_accepted: boolean;
+  accepted_by_author?: boolean;
+  accepted_by_lecturer?: boolean;
   score: number;
   user_vote: number;
   replies: CommentReply[];
@@ -189,6 +194,8 @@ const ReplyItem: React.FC<{ reply: CommentReply; onVote: (id: number, val: numbe
 interface CommentItemProps {
   comment: CommentType;
   canAccept: boolean;
+  isPostAuthor?: boolean;
+  isLecturer?: boolean;
   replyingTo: number | null;
   replyContent: string;
   submitting: boolean;
@@ -203,6 +210,8 @@ interface CommentItemProps {
 const CommentItem: React.FC<CommentItemProps> = ({
   comment,
   canAccept,
+  isPostAuthor,
+  isLecturer,
   replyingTo,
   replyContent,
   submitting,
@@ -212,54 +221,67 @@ const CommentItem: React.FC<CommentItemProps> = ({
   onCancelReply,
   onAccept,
   onVote
-}) => (
-  <div style={{ borderBottom: '1px solid #e3e6e8', padding: '20px 0' }}>
-    <div style={{ display: 'flex', gap: 16 }}>
-      <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        minWidth: 48,
-        gap: 4,
-        paddingTop: 4
-      }}>
-        <Button 
-          type="text" 
-          icon={<CaretUpOutlined style={{ fontSize: 32, color: comment.user_vote === 1 ? '#f48024' : '#babfc4' }} />} 
-          onClick={() => onVote(comment.id, 1)}
-          style={{ padding: 0, height: 'auto' }} 
-        />
-        <Text strong style={{ fontSize: 22, color: '#6a737c' }}>{comment.score}</Text>
-        <Button 
-          type="text" 
-          icon={<CaretDownOutlined style={{ fontSize: 32, color: comment.user_vote === -1 ? '#39739d' : '#babfc4' }} />} 
-          onClick={() => onVote(comment.id, -1)}
-          style={{ padding: 0, height: 'auto' }} 
-        />
-        {canAccept ? (
-          <Tooltip title={comment.is_accepted ? "Bỏ chấp nhận câu trả lời" : "Chấp nhận câu trả lời"}>
-            <Button
-              type="text"
-              icon={comment.is_accepted ? 
-                <CheckCircleFilled style={{ fontSize: 28, color: '#5eba7d' }} /> : 
-                <CheckCircleOutlined style={{ fontSize: 28, color: '#babfc4' }} />
-              }
-              onClick={() => onAccept(comment.id)}
-              style={{ padding: 0, height: 'auto', marginTop: 8 }}
-            />
-          </Tooltip>
-        ) : comment.is_accepted ? (
-          <Tooltip title="Câu trả lời đã được chấp nhận">
-            <CheckCircleFilled style={{ fontSize: 28, color: '#5eba7d', marginTop: 8 }} />
-          </Tooltip>
-        ) : null}
-      </div>
+}) => {
+  const isAcceptedByMe = isPostAuthor 
+    ? comment.accepted_by_author 
+    : isLecturer 
+    ? comment.accepted_by_lecturer 
+    : comment.is_accepted;
+
+  return (
+    <div style={{ borderBottom: '1px solid #e3e6e8', padding: '20px 0' }}>
+      <div style={{ display: 'flex', gap: 16 }}>
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          minWidth: 48,
+          gap: 4,
+          paddingTop: 4
+        }}>
+          <Button 
+            type="text" 
+            icon={<CaretUpOutlined style={{ fontSize: 32, color: comment.user_vote === 1 ? '#f48024' : '#babfc4' }} />} 
+            onClick={() => onVote(comment.id, 1)}
+            style={{ padding: 0, height: 'auto' }} 
+          />
+          <Text strong style={{ fontSize: 22, color: '#6a737c' }}>{comment.score}</Text>
+          <Button 
+            type="text" 
+            icon={<CaretDownOutlined style={{ fontSize: 32, color: comment.user_vote === -1 ? '#39739d' : '#babfc4' }} />} 
+            onClick={() => onVote(comment.id, -1)}
+            style={{ padding: 0, height: 'auto' }} 
+          />
+          {canAccept ? (
+            <Tooltip title={isAcceptedByMe ? "Bỏ chấp nhận câu trả lời" : "Chấp nhận câu trả lời"}>
+              <Button
+                type="text"
+                icon={isAcceptedByMe ? 
+                  <CheckCircleFilled style={{ fontSize: 28, color: '#5eba7d' }} /> : 
+                  <CheckCircleOutlined style={{ fontSize: 28, color: '#babfc4' }} />
+                }
+                onClick={() => onAccept(comment.id)}
+                style={{ padding: 0, height: 'auto', marginTop: 8 }}
+              />
+            </Tooltip>
+          ) : comment.is_accepted ? (
+            <Tooltip title="Câu trả lời đã được chấp nhận">
+              <CheckCircleFilled style={{ fontSize: 28, color: '#5eba7d', marginTop: 8 }} />
+            </Tooltip>
+          ) : null}
+        </div>
 
       <div style={{ flex: 1 }}>
         {comment.is_accepted && (
           <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', color: '#5eba7d' }}>
             <CheckOutlined style={{ marginRight: 8, fontSize: 16, fontWeight: 'bold' }} />
-            <Text strong style={{ color: '#5eba7d', fontSize: 14 }}>CÂU TRẢ LỜI ĐƯỢC CHẤP NHẬN</Text>
+            <Text strong style={{ color: '#5eba7d', fontSize: 13, letterSpacing: '0.5px' }}>
+              {comment.accepted_by_author && comment.accepted_by_lecturer
+                ? 'ĐƯỢC CHẤP NHẬN BỞI TÁC GIẢ, GIẢNG VIÊN'
+                : comment.accepted_by_lecturer
+                ? 'ĐƯỢC CHẤP NHẬN BỞI GIẢNG VIÊN'
+                : 'ĐƯỢC CHẤP NHẬN BỞI TÁC GIẢ'}
+            </Text>
           </div>
         )}
         <Paragraph style={{ fontSize: 15, lineHeight: 1.8, color: '#232629', marginBottom: 12, whiteSpace: 'pre-wrap' }}>
@@ -344,6 +366,7 @@ const CommentItem: React.FC<CommentItemProps> = ({
     </div>
   </div>
 );
+};
 
 const PostDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -749,7 +772,7 @@ const PostDetailPage: React.FC = () => {
     );
   }
 
-  const isPostAuthor = user && user.username === post.author_name;
+  const isPostAuthor = user && user.username === post.author_username;
   const isLecturer = user && user.role === 'LECTURER';
   const canAccept = isPostAuthor || isLecturer;
 
@@ -1059,6 +1082,8 @@ const PostDetailPage: React.FC = () => {
                     key={comment.id}
                     comment={comment}
                     canAccept={!!canAccept}
+                    isPostAuthor={isPostAuthor}
+                    isLecturer={isLecturer}
                     replyingTo={replyingTo}
                     replyContent={replyContent}
                     submitting={submitting}

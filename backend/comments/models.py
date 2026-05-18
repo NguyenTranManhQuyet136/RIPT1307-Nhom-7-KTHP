@@ -22,6 +22,8 @@ class Comment(models.Model):
         related_name='replies'
     )
     is_accepted = models.BooleanField(default=False)
+    accepted_by_author = models.BooleanField(default=False)
+    accepted_by_lecturer = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

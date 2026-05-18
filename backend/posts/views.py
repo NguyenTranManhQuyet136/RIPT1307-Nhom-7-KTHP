@@ -7,12 +7,20 @@ from .serializers import PostSerializer
 from .filters import PostFilter
 from drf_spectacular.utils import extend_schema
 
+class IsAuthorOrReadOnly(permissions.BasePermission):
+    def has_object_permission(self, request, view, obj):
+        if request.user and request.user.role == 'ADMIN':
+            return True
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        return obj.author == request.user
+
 class PostViewSet(viewsets.ModelViewSet):
     queryset = Post.objects.all()
     serializer_class = PostSerializer
     
-    # Phân quyền: Ai cũng được xem, nhưng phải đăng nhập mới được đăng/sửa/xóa
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    # Phân quyền: Ai cũng được xem, tác giả mới có quyền sửa/xóa bài viết của mình
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly, IsAuthorOrReadOnly]
 
     # Khai báo các bộ lọc sử dụng
     filter_backends = [

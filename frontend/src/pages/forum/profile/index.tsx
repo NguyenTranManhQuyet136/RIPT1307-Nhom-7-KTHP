@@ -522,28 +522,24 @@ export default function ProfilePage() {
         </Header>
 
         <Layout style={{ marginTop: 56, maxWidth: 1264, margin: '56px auto 0', width: '100%', background: '#fff' }}>
-          <Sider width={164} style={{ background: '#fff', borderRight: '1px solid #e3e6e8', position: 'fixed', height: 'calc(100vh - 56px)', left: 'auto' }}>
+          <Sider width={210} style={{ background: '#fff', borderRight: '1px solid #e3e6e8', position: 'fixed', height: 'calc(100vh - 56px)', left: 'auto' }}>
             <Menu
               mode="inline"
-              defaultSelectedKeys={['users']}
+              selectedKeys={[]}
               style={{ height: '100%', borderRight: 0, paddingTop: 24 }}
               onClick={({ key }) => {
-                if (key === 'home' || key === 'questions') {
-                  history.push('/forum');
-                }
+                history.push('/forum');
               }}
               items={[
                 { key: 'home', icon: <GlobalOutlined />, label: 'Trang chủ' },
-                { key: 'public', label: 'CỘNG ĐỒNG', type: 'group', children: [
-                  { key: 'questions', icon: <QuestionCircleOutlined />, label: 'Câu hỏi' },
-                  { key: 'tags', icon: <TagsOutlined />, label: 'Thẻ (Tags)' },
-                  { key: 'users', icon: <UserOutlined />, label: 'Người dùng' },
-                ]}
+                { key: 'tags', icon: <TagsOutlined />, label: 'Thẻ phổ biến' },
+                { key: 'lecturers', icon: <UserOutlined />, label: 'Đội ngũ giảng viên' },
+                { key: 'my-questions', icon: <QuestionCircleOutlined />, label: 'Câu hỏi của tôi' },
               ]}
             />
           </Sider>
 
-          <Content style={{ padding: '24px', marginLeft: 164, minHeight: 280, background: '#fff' }}>
+          <Content style={{ padding: '24px', marginLeft: 210, minHeight: 280, background: '#fff' }}>
             <Row gutter={24}>
               {/* Cột trái: Quản lý ảnh đại diện & Thông tin nhanh */}
               <Col xs={24} md={8}>
