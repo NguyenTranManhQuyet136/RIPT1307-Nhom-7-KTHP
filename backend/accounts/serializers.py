@@ -99,6 +99,14 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     }
     def validate(self, attrs):
         data = super().validate(attrs)
+        avatar_url = None
+        if self.user.avatar:
+            request = self.context.get('request')
+            if request:
+                avatar_url = request.build_absolute_uri(self.user.avatar.url)
+            else:
+                avatar_url = self.user.avatar.url
+
         data['user'] = {
             'id': self.user.id,
             'username': self.user.username,
@@ -108,7 +116,8 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             'university': self.user.university,
             'major': self.user.major,
             'is_verified_lecturer': self.user.is_verified_lecturer,
-            'is_verified': self.user.is_verified
+            'is_verified': self.user.is_verified,
+            'avatar': avatar_url
         }
         return data
 

@@ -15,6 +15,9 @@ class PostSerializer(serializers.ModelSerializer):
     )
     
     author_name = serializers.ReadOnlyField(source='author.username')
+    author_avatar = serializers.SerializerMethodField()
+    author_role = serializers.ReadOnlyField(source='author.role')
+    author_is_verified = serializers.ReadOnlyField(source='author.is_verified')
     comment_count = serializers.SerializerMethodField()
     score = serializers.SerializerMethodField()
     user_vote = serializers.SerializerMethodField()
@@ -23,11 +26,20 @@ class PostSerializer(serializers.ModelSerializer):
         model = Post
         fields = [
             'id', 'title', 'content', 'author', 'author_name', 
+            'author_avatar', 'author_role', 'author_is_verified',
             'tags', 'tag_names', 'view_count', 'comment_count', 
             'score', 'user_vote', 'is_closed', 
             'created_at', 'updated_at'
         ]
         read_only_fields = ['author', 'view_count', 'created_at', 'updated_at']
+
+    def get_author_avatar(self, obj):
+        request = self.context.get('request')
+        if obj.author.avatar:
+            if request:
+                return request.build_absolute_uri(obj.author.avatar.url)
+            return obj.author.avatar.url
+        return None
 
     def get_comment_count(self, obj):
         return obj.comments.count()

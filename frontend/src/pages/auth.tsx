@@ -12,7 +12,8 @@ import {
   Card,
   Space,
   Alert,
-  Avatar
+  Avatar,
+  Upload
 } from 'antd';
 import { 
   UserOutlined, 
@@ -21,7 +22,8 @@ import {
   BankOutlined, 
   ReadOutlined, 
   LinkOutlined,
-  ArrowLeftOutlined
+  ArrowLeftOutlined,
+  CameraOutlined
 } from '@ant-design/icons';
 import { history } from 'umi';
 
@@ -87,11 +89,27 @@ const AuthForm: React.FC = () => {
     const baseUrl = 'http://localhost:8002';
 
     try {
-      const response = await fetch(`${baseUrl}${endpoint}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(values),
-      });
+      let response;
+      if (formType === 'register') {
+        const formData = new FormData();
+        Object.keys(values).forEach(key => {
+          if (values[key] !== undefined && values[key] !== null) {
+            formData.append(key, values[key]);
+          }
+        });
+        formData.set('role', role);
+
+        response = await fetch(`${baseUrl}${endpoint}`, {
+          method: 'POST',
+          body: formData,
+        });
+      } else {
+        response = await fetch(`${baseUrl}${endpoint}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(values),
+        });
+      }
 
       const data = await response.json();
 
@@ -217,10 +235,44 @@ const AuthForm: React.FC = () => {
                   <Form.Item label="Trường đại học" name="university" rules={[{ required: true, message: 'Vui lòng nhập tên trường!' }]} style={{ marginBottom: 8 }}>
                     <Input prefix={<BankOutlined style={{ color: '#bfbfbf' }} />} placeholder="Đại học Bách Khoa" />
                   </Form.Item>
+                  <Form.Item 
+                    label={role === 'LECTURER' ? 'Bộ môn giảng dạy' : 'Ngành học'} 
+                    name="major" 
+                    rules={[{ required: true, message: 'Vui lòng nhập ngành học/bộ môn!' }]} 
+                    style={{ marginBottom: 8 }}
+                  >
+                    <Input prefix={<ReadOutlined style={{ color: '#bfbfbf' }} />} placeholder={role === 'LECTURER' ? 'Khoa học máy tính' : 'Kỹ thuật Phần mềm'} />
+                  </Form.Item>
                   {role === 'LECTURER' && (
-                    <Form.Item label="Link hồ sơ giảng dạy" name="profile_url" rules={[{ required: true, message: 'Nhập link hồ sơ!' }]} style={{ marginBottom: 8 }}>
-                      <Input prefix={<LinkOutlined style={{ color: '#f48024' }} />} placeholder="https://..." />
-                    </Form.Item>
+                    <>
+                      <Form.Item label="Link hồ sơ giảng dạy" name="profile_url" rules={[{ required: true, message: 'Nhập link hồ sơ!' }]} style={{ marginBottom: 8 }}>
+                        <Input prefix={<LinkOutlined style={{ color: '#f48024' }} />} placeholder="https://..." />
+                      </Form.Item>
+                      <Form.Item
+                        label="Ảnh minh chứng (thẻ GV, bằng cấp...)"
+                        name="evidence_img"
+                        rules={[{ required: true, message: 'Vui lòng tải lên ảnh minh chứng!' }]}
+                        style={{ marginBottom: 8 }}
+                        valuePropName="file"
+                        getValueFromEvent={(e: any) => {
+                          if (Array.isArray(e)) {
+                            return e;
+                          }
+                          return e && e.fileList && e.fileList[0] ? e.fileList[0].originFileObj : null;
+                        }}
+                      >
+                        <Upload
+                          beforeUpload={() => false}
+                          maxCount={1}
+                          listType="picture"
+                          accept="image/*"
+                        >
+                          <Button icon={<CameraOutlined />} block style={{ height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                            Chọn ảnh minh chứng
+                          </Button>
+                        </Upload>
+                      </Form.Item>
+                    </>
                   )}
                   <Button type="primary" htmlType="submit" block size="large" loading={loading} style={{ marginTop: 12 }}>Đăng ký tài khoản</Button>
                   <div style={{ textAlign: 'center', marginTop: 12 }}>
