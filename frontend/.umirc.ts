@@ -14,4 +14,6 @@ export default defineConfig({
     { path: "/admin/posts", component: "admin/posts", layout: false },
   ],
   npmClient: 'npm',
+  favicons: [ '/favicon.png' ],
+  title: 'EduForum',
 });

@@ -923,7 +923,7 @@ const ForumPage: React.FC = () => {
               style={{ fontSize: 22, fontWeight: 800, color: '#000', cursor: 'pointer', display: 'flex', alignItems: 'center', width: 164 }}
               onClick={() => { filterByTag(null); history.push('/forum'); }}
             >
-              <FireOutlined style={{ color: '#f48024', marginRight: 4 }} />
+              <img src="/favicon.png" alt="EduForum Logo" style={{ height: 28, marginRight: 8, objectFit: 'contain' }} />
               <span>edu<Text strong style={{ color: '#f48024' }}>forum</Text></span>
             </div>
 

@@ -899,7 +899,7 @@ const PostDetailPage: React.FC = () => {
               style={{ fontSize: 22, fontWeight: 800, color: '#000', cursor: 'pointer', display: 'flex', alignItems: 'center', marginRight: 24 }}
               onClick={() => history.push('/forum')}
             >
-              <FireOutlined style={{ color: '#f48024', marginRight: 4 }} />
+              <img src="/favicon.png" alt="EduForum Logo" style={{ height: 28, marginRight: 8, objectFit: 'contain' }} />
               <span>edu<Text strong style={{ color: '#f48024' }}>forum</Text></span>
             </div>
             <div style={{ flex: 1, padding: '0 24px 0 0' }}>

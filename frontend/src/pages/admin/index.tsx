@@ -210,7 +210,7 @@ export default function AdminDashboard() {
         <Header style={{ background: '#fff', borderTop: '3px solid #f48024', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', padding: 0, height: 56, display: 'flex', alignItems: 'center', position: 'fixed', top: 0, left: 0, width: '100%', zIndex: 1000 }}>
           <div style={{ display: 'flex', alignItems: 'center', width: '100%', maxWidth: 1264, margin: '0 auto', padding: '0 24px' }}>
             <div style={{ fontSize: 22, fontWeight: 800, color: '#000', cursor: 'pointer', display: 'flex', alignItems: 'center' }} onClick={() => history.push('/admin')}>
-              <FireOutlined style={{ color: '#f48024', marginRight: 4 }} />
+              <img src="/favicon.png" alt="EduForum Logo" style={{ height: 28, marginRight: 8, objectFit: 'contain' }} />
               <span>edu<Text strong style={{ color: '#f48024' }}>forum</Text></span>
               <Text style={{ fontSize: 12, color: '#f48024', marginLeft: 8, fontWeight: 600, border: '1px solid #f48024', borderRadius: 3, padding: '1px 6px' }}>ADMIN</Text>
             </div>
