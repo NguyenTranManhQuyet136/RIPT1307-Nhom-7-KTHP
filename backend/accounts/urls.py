@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import RegisterView, CustomTokenObtainPairView, ForgotPasswordView, ResetPasswordView, UserProfileUpdateView, UnverifiedLecturersListView, VerifyLecturerView, VerifiedLecturersListView
+from .views import RegisterView, CustomTokenObtainPairView, ForgotPasswordView, ResetPasswordView, UserProfileUpdateView, UnverifiedLecturersListView, VerifyLecturerView, VerifiedLecturersListView, PublicStatsView
 from rest_framework_simplejwt.views import TokenRefreshView
 
 urlpatterns = [
@@ -12,4 +12,5 @@ urlpatterns = [
     path('lecturers/unverified/', UnverifiedLecturersListView.as_view(), name='unverified_lecturers'),
     path('lecturers/verified/', VerifiedLecturersListView.as_view(), name='verified_lecturers'),
     path('lecturers/<uuid:pk>/verify/', VerifyLecturerView.as_view(), name='verify_lecturer'),
+    path('public-stats/', PublicStatsView.as_view(), name='public_stats'),
 ]

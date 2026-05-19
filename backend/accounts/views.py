@@ -223,3 +223,16 @@ class VerifiedLecturersListView(APIView):
                 "date_joined": lecturer.date_joined
             })
         return Response(data, status=status.HTTP_200_OK)
+
+class PublicStatsView(APIView):
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        summary="Thống kê công khai về sinh viên và giảng viên",
+        description="Trả về tổng số học sinh và giảng viên đã được xác thực trong cơ sở dữ liệu."
+    )
+    def get(self, request):
+        return Response({
+            "total_students": User.objects.filter(role='STUDENT').count(),
+            "total_lecturers": User.objects.filter(role='LECTURER', is_verified=True).count()
+        }, status=status.HTTP_200_OK)

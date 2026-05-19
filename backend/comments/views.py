@@ -48,19 +48,23 @@ class CommentViewSet(viewsets.ModelViewSet):
         is_user_author = (request.user == post.author)
         is_user_lecturer = (is_verified_lecturer or is_admin)
 
-        Comment.objects.filter(post=post).exclude(id=comment.id).update(
-            is_accepted=False,
-            accepted_by_author=False,
-            accepted_by_lecturer=False
-        )
-
         if is_user_author:
+            Comment.objects.filter(post=post).exclude(id=comment.id).update(accepted_by_author=False)
             comment.accepted_by_author = not comment.accepted_by_author
+
         if is_user_lecturer:
+            Comment.objects.filter(post=post).exclude(id=comment.id).update(accepted_by_lecturer=False)
             comment.accepted_by_lecturer = not comment.accepted_by_lecturer
 
         comment.is_accepted = (comment.accepted_by_author or comment.accepted_by_lecturer)
         comment.save()
+
+        # Cập nhật is_accepted cho toàn bộ các comment khác của bài viết
+        for other_comment in Comment.objects.filter(post=post).exclude(id=comment.id):
+            is_acc = (other_comment.accepted_by_author or other_comment.accepted_by_lecturer)
+            if other_comment.is_accepted != is_acc:
+                other_comment.is_accepted = is_acc
+                other_comment.save(update_fields=['is_accepted'])
 
         msg = 'Đã cập nhật trạng thái chấp nhận câu trả lời.'
         return Response({

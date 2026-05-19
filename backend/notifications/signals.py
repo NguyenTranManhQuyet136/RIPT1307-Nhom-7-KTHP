@@ -85,40 +85,7 @@ def create_comment_notification(sender, instance, created, **kwargs):
                 )
 
 
-# 3. BẮT SỰ KIỆN: KHI CÓ BÀI ĐĂNG MỚI → Thông báo cho Admin & Giảng viên
-@receiver(post_save, sender=Post)
+# 3. BẮT SỰ KIỆN: KHI CÓ BÀI ĐĂNG MỚI (Đã tắt theo yêu cầu: không gửi thông báo)
+# @receiver(post_save, sender=Post)
 def notify_new_post_created(sender, instance, created, **kwargs):
-    if created:
-        author = instance.author
-
-        # Lấy danh sách Admin và Giảng viên đã xác thực (trừ chính tác giả)
-        staff_users = User.objects.filter(
-            role__in=['ADMIN', 'LECTURER'],
-            is_verified=True,
-            is_active=True,
-        ).exclude(pk=author.pk)
-
-        staff_emails = list(staff_users.values_list('email', flat=True))
-
-        # Tạo thông báo trên quả chuông cho từng Admin/Giảng viên
-        notifications = [
-            Notification(
-                recipient=user,
-                actor=author,
-                notification_type='NEW_POST',
-                target_post_id=instance.id,
-            )
-            for user in staff_users
-        ]
-        Notification.objects.bulk_create(notifications)
-
-        # Gửi email thông báo chạy ngầm
-        if staff_emails:
-            send_email_background(
-                subject=f"EduForum - Câu hỏi mới: {instance.title}",
-                message=(
-                    f"Sinh viên {author.username} vừa đăng một câu hỏi mới.\n"
-                    f"Xem ngay tại: http://localhost:8000/forum/post/{instance.id}"
-                ),
-                recipient_list=staff_emails,
-            )
+    pass

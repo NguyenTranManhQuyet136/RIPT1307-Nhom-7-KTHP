@@ -241,6 +241,7 @@ export default function AdminPosts() {
   return (
     <ConfigProvider theme={{ algorithm: theme.defaultAlgorithm, token: { colorPrimary: '#f48024', borderRadius: 4, fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif' } }}>
       <style>{`
+        .ant-popover, .ant-popover-content, .ant-dropdown, .ant-dropdown-menu { transition: none !important; animation: none !important; }
         .admin-sider .ant-menu-item-selected { background-color: #fff7e6 !important; color: #f48024 !important; }
         .admin-sider .ant-menu-item-selected::after { border-right-color: #f48024 !important; }
         .admin-sider .ant-menu-item:hover { color: #f48024 !important; }
@@ -263,12 +264,19 @@ export default function AdminPosts() {
                       <Button type="text" icon={<BellOutlined style={{ fontSize: 20, color: '#525960' }} />} />
                     </Badge>
                   </Popover>
-                  <Dropdown menu={{ items: [
-                    { key: 'forum', icon: <FireOutlined />, label: 'Về diễn đàn', onClick: () => history.push('/forum') },
-                    { key: 'profile', icon: <UserOutlined />, label: 'Tài khoản', onClick: () => history.push('/forum/profile') },
-                    { type: 'divider' },
-                    { key: 'logout', icon: <LogoutOutlined />, label: 'Đăng xuất', onClick: handleLogout },
-                  ]}} placement="bottomRight" arrow>
+                  <Dropdown 
+                    menu={{ items: [
+                      { key: 'forum', icon: <FireOutlined />, label: 'Về diễn đàn', onClick: () => history.push('/forum') },
+                      { key: 'profile', icon: <UserOutlined />, label: 'Tài khoản', onClick: () => history.push('/forum/profile') },
+                      { type: 'divider' },
+                      { key: 'logout', icon: <LogoutOutlined />, label: 'Đăng xuất', onClick: handleLogout },
+                    ]}} 
+                    placement="bottom" 
+                    arrow 
+                    trigger={['click']}
+                    transitionName=""
+                    motion={{ motionName: '' }}
+                  >
                     {user.avatar ? (
                       <Avatar src={user.avatar.startsWith('http') ? user.avatar : `${BASE_URL}${user.avatar}`} style={{ cursor: 'pointer', border: '1px solid #e3e6e8' }} />
                     ) : (

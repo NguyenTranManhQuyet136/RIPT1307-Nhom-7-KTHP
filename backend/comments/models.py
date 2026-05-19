@@ -28,7 +28,7 @@ class Comment(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ['-is_accepted', '-created_at']
+        ordering = ['-is_accepted', '-accepted_by_author', '-accepted_by_lecturer', '-created_at']
 
     def __str__(self):
         return f"Comment by {self.author.username} on {self.post.title}"

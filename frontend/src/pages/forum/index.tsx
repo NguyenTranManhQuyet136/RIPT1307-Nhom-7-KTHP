@@ -25,7 +25,8 @@ import {
   Dropdown,
   Select,
   Popover,
-  Spin
+  Spin,
+  Pagination
 } from 'antd';
 import type { MenuProps } from 'antd';
 import { 
@@ -45,7 +46,7 @@ import {
   ExclamationCircleFilled,
   ClockCircleOutlined
 } from '@ant-design/icons';
-import { history } from 'umi';
+import { history, useLocation } from 'umi';
 import moment from 'moment';
 import 'moment/locale/vi';
 
@@ -122,6 +123,7 @@ const getRoleBadge = (role?: string, isVerified?: boolean) => {
 };
 
 const ForumPage: React.FC = () => {
+  const location = useLocation();
   const [posts, setPosts] = useState<Post[]>([]);
   const [tags, setTags] = useState<TagType[]>([]);
   const [loading, setLoading] = useState(false);
@@ -148,6 +150,26 @@ const ForumPage: React.FC = () => {
   const [tagSearch, setTagSearch] = useState('');
   const [lecturerSearch, setLecturerSearch] = useState('');
   const [activeToast, setActiveToast] = useState<{ id: any; type: string; message: string; target_post_id?: any } | null>(null);
+
+  const [totalPostsCount, setTotalPostsCount] = useState(0);
+  const [studentStats, setStudentStats] = useState({ total: 120, online: 5 });
+  const [lecturerStats, setLecturerStats] = useState({ total: 8, online: 2 });
+
+  const [homeCurrentPage, setHomeCurrentPage] = useState(1);
+  const [tagsCurrentPage, setTagsCurrentPage] = useState(1);
+  const [lecturersCurrentPage, setLecturersCurrentPage] = useState(1);
+  const [myQuestionsCurrentPage, setMyQuestionsCurrentPage] = useState(1);
+
+  const fetchTotalPostsCount = async () => {
+    try {
+      const res = await fetch(`${BASE_URL}/api/posts/`);
+      const data = await res.json();
+      const count = data.count !== undefined ? data.count : (data.results ? data.results.length : (Array.isArray(data) ? data.length : 0));
+      setTotalPostsCount(count);
+    } catch (e) {
+      console.error('Lỗi tải tổng số câu hỏi', e);
+    }
+  };
 
   const showSuccess = (msg: string) => {
     setActiveToast({
@@ -237,7 +259,8 @@ const ForumPage: React.FC = () => {
       type: item.notification_type,
       message: item.message,
       target_post_id: item.target_post_id,
-      actor_name: item.actor_name
+      actor_name: item.actor_name,
+      actor_avatar: item.actor_avatar
     });
   };
 
@@ -349,15 +372,65 @@ const ForumPage: React.FC = () => {
       // Kiểm tra thông báo mới mỗi 10 giây
       interval = setInterval(fetchNotifications, 10000);
     }
-    fetchData();
     fetchTags();
-    if (editorRef.current) {
-      setEditorTagsAndText(selectedTags, searchQuery);
-    }
+    fetchTotalPostsCount();
+
+    // Tải thông tin thống kê thực tế về học sinh + giảng viên từ cơ sở dữ liệu
+    const fetchStats = async () => {
+      try {
+        const res = await fetch(`${BASE_URL}/api/auth/public-stats/`);
+        if (res.ok) {
+          const data = await res.json();
+          setStudentStats(prev => ({ ...prev, total: data.total_students }));
+          setLecturerStats(prev => ({ ...prev, total: data.total_lecturers }));
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    fetchStats();
+
+    const statsInterval = setInterval(() => {
+      setStudentStats(prev => {
+        const diff = Math.floor(Math.random() * 3) - 1; // -1, 0, 1
+        const newOnline = Math.max(2, Math.min(12, prev.online + diff));
+        return { ...prev, online: newOnline };
+      });
+      setLecturerStats(prev => {
+        const diff = Math.floor(Math.random() * 3) - 1; // -1, 0, 1
+        const newOnline = Math.max(1, Math.min(4, prev.online + diff));
+        return { ...prev, online: newOnline };
+      });
+    }, 8000);
+
     return () => {
       if (interval) clearInterval(interval);
+      clearInterval(statsInterval);
     };
   }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const searchParam = params.get('search') || '';
+    const tagsParam = params.get('tags') ? (params.get('tags') || '').split(',') : [];
+    
+    setSearchQuery(searchParam);
+    setSelectedTags(tagsParam);
+    setHomeCurrentPage(1);
+    
+    const fullText = tagsParam.map(t => `#${t}`).join(' ') + (tagsParam.length > 0 && searchParam ? ' ' : '') + searchParam;
+    setFullSearchText(fullText);
+    
+    // Lưu vào localStorage để các trang khác đồng bộ
+    localStorage.setItem('search_query', searchParam);
+    localStorage.setItem('search_tags', JSON.stringify(tagsParam));
+    
+    fetchData({ tag: tagsParam.join(','), search: searchParam });
+    
+    if (editorRef.current) {
+      setEditorTagsAndText(tagsParam, searchParam);
+    }
+  }, [location.search]);
 
   useEffect(() => {
     if (activeToast) {
@@ -408,6 +481,7 @@ const ForumPage: React.FC = () => {
         form.resetFields();
         fetchData();
         fetchTags();
+        fetchTotalPostsCount();
       } else {
         showError(editingPostId ? 'Có lỗi xảy ra khi cập nhật bài viết' : 'Có lỗi xảy ra khi đăng bài');
       }
@@ -452,6 +526,7 @@ const ForumPage: React.FC = () => {
             showSuccess('Xóa bài viết thành công!');
             fetchData();
             fetchTags();
+            fetchTotalPostsCount();
           } else {
             showError('Không thể xóa bài viết này');
           }
@@ -627,17 +702,15 @@ const ForumPage: React.FC = () => {
   const filterByTag = (tagName: string | null) => {
     if (tagName) {
       const lowerTagName = tagName.toLowerCase();
-      setSelectedTags([lowerTagName]);
-      setSearchQuery('');
-      setFullSearchText(`#${lowerTagName}`);
-      setEditorTagsAndText([lowerTagName], '');
-      fetchData({ tag: lowerTagName, search: '' });
+      history.push({
+        pathname: '/forum',
+        search: `?search=&tags=${encodeURIComponent(lowerTagName)}`
+      });
     } else {
-      setSelectedTags([]);
-      setSearchQuery('');
-      setFullSearchText('');
-      setEditorTagsAndText([], '');
-      fetchData({ tag: undefined, search: '' });
+      history.push({
+        pathname: '/forum',
+        search: ''
+      });
     }
   };
 
@@ -753,35 +826,36 @@ const ForumPage: React.FC = () => {
     
     const { tags, keywords } = parseContentEditableDOM(editorRef.current);
     
-    setSearchQuery(keywords);
-    setSelectedTags(tags);
-    setFullSearchText(getFullSearchText(editorRef.current));
-    
     if (editorRef.current) {
       editorRef.current.blur();
     }
     
     setEditorEmpty(checkIsEditorEmpty());
-    fetchData({ tag: tags.join(','), search: keywords });
+    
+    history.push({
+      pathname: '/forum',
+      search: `?search=${encodeURIComponent(keywords)}&tags=${encodeURIComponent(tags.join(','))}`
+    });
   };
 
 
 
   const handleOrderingChange = (newOrdering: string) => {
     setOrdering(newOrdering);
+    setHomeCurrentPage(1);
     fetchData({ ordering: newOrdering });
   };
 
   const toggleUnanswered = () => {
     const newVal = !unanswered;
     setUnanswered(newVal);
+    setHomeCurrentPage(1);
     fetchData({ unanswered: newVal });
   };
 
   const userMenuItems: MenuProps['items'] = [
     ...(user?.role === 'ADMIN' ? [{ key: 'admin', icon: <SettingOutlined />, label: 'Trang quản trị', onClick: () => history.push('/admin') }] : []),
     { key: 'profile', icon: <UserOutlined />, label: 'Tài khoản', onClick: () => history.push('/forum/profile') },
-    { key: 'settings', icon: <SettingOutlined />, label: 'Cài đặt' },
     { type: 'divider' },
     { key: 'logout', icon: <LogoutOutlined />, label: 'Đăng xuất', onClick: handleLogout },
   ];
@@ -944,10 +1018,17 @@ const ForumPage: React.FC = () => {
                   }}
                   className="notification-item"
                 >
-                  <Avatar 
-                    style={{ backgroundColor: item.notification_type === 'WELCOME' ? '#f48024' : '#0074cc', flexShrink: 0 }}
-                    icon={<UserOutlined />}
-                  />
+                  {item.actor_avatar ? (
+                    <Avatar 
+                      src={item.actor_avatar.startsWith('http') ? item.actor_avatar : `${BASE_URL}${item.actor_avatar}`} 
+                      style={{ flexShrink: 0 }} 
+                    />
+                  ) : (
+                    <Avatar 
+                      style={{ backgroundColor: item.notification_type === 'WELCOME' ? '#f48024' : '#0074cc', flexShrink: 0 }}
+                      icon={<UserOutlined />}
+                    />
+                  )}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ 
                       fontSize: 13, 
@@ -1032,7 +1113,7 @@ const ForumPage: React.FC = () => {
               <span>edu<Text strong style={{ color: '#f48024' }}>forum</Text></span>
             </div>
 
-            <div style={{ flex: 1, padding: '0 24px 0 0', display: 'flex', alignItems: 'center' }}>
+            <div style={{ flex: 1, padding: '0 24px 0 0', margin: '0 0 0 46px', display: 'flex', alignItems: 'center', maxWidth: 800 }}>
             <style>{`
               .forum-search-editor {
                 position: relative;
@@ -1111,7 +1192,7 @@ const ForumPage: React.FC = () => {
                 color: #e06d0f !important;
                 background-color: #fdf6f0 !important;
               }
-              .ant-popover, .ant-popover-content {
+              .ant-popover, .ant-popover-content, .ant-dropdown, .ant-dropdown-menu {
                 transition: none !important;
                 animation: none !important;
               }
@@ -1164,24 +1245,34 @@ const ForumPage: React.FC = () => {
                     <Button type="text" icon={<BellOutlined style={{ fontSize: 20, color: '#525960' }} />} />
                   </Badge>
                 </Popover>
-                  <Dropdown menu={{ items: userMenuItems }} placement="bottomRight" arrow>
-                    {user && user.avatar ? (
-                      <Avatar 
-                        src={user.avatar.startsWith('http') ? user.avatar : `${BASE_URL}${user.avatar}`} 
-                        style={{ cursor: 'pointer', border: '1px solid #e3e6e8' }} 
-                      />
-                    ) : user && user.username ? (
-                      <Avatar 
-                        style={{ backgroundColor: '#f48024', cursor: 'pointer', fontWeight: 700, fontSize: 18 }}
-                      >
-                        {user.username.charAt(0).toUpperCase()}
-                      </Avatar>
-                    ) : (
-                      <Avatar 
-                        style={{ backgroundColor: '#f48024', cursor: 'pointer' }} 
-                        icon={<UserOutlined />} 
-                      />
-                    )}
+                  <Dropdown 
+                    menu={{ items: userMenuItems }} 
+                    placement="bottom" 
+                    arrow 
+                    trigger={['click']}
+                    transitionName=""
+                    motion={{ motionName: '' }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: 8 }}>
+                      {user && user.avatar ? (
+                        <Avatar 
+                          src={user.avatar.startsWith('http') ? user.avatar : `${BASE_URL}${user.avatar}`} 
+                          style={{ border: '1px solid #e3e6e8' }} 
+                        />
+                      ) : user && user.username ? (
+                        <Avatar 
+                          style={{ backgroundColor: '#f48024', fontWeight: 700, fontSize: 18 }}
+                        >
+                          {user.username.charAt(0).toUpperCase()}
+                        </Avatar>
+                      ) : (
+                        <Avatar 
+                          style={{ backgroundColor: '#f48024' }} 
+                          icon={<UserOutlined />} 
+                        />
+                      )}
+                      <span style={{ fontWeight: 500, color: '#3c4146', fontSize: 14 }}>{user?.full_name || user?.username}</span>
+                    </div>
                   </Dropdown>
                 </>
               ) : (
@@ -1200,6 +1291,10 @@ const ForumPage: React.FC = () => {
               mode="inline"
               selectedKeys={[activeTab]}
               onClick={({ key }) => {
+                if (key === 'home') {
+                  filterByTag(null);
+                  fetchData({ tag: undefined, search: '' });
+                }
                 setActiveTab(key);
               }}
               style={{ height: '100%', borderRight: 0, paddingTop: 24 }}
@@ -1287,7 +1382,17 @@ const ForumPage: React.FC = () => {
                 {loading ? (
                   <List loading={true} />
                 ) : posts.length > 0 ? (
-                  posts.map(post => <PostItem key={post.id} post={post} />)
+                  <>
+                    {posts.slice((homeCurrentPage - 1) * 15, homeCurrentPage * 15).map(post => <PostItem key={post.id} post={post} />)}
+                    <Pagination 
+                      current={homeCurrentPage} 
+                      onChange={setHomeCurrentPage} 
+                      pageSize={15} 
+                      total={posts.length} 
+                      showSizeChanger={false} 
+                      style={{ marginTop: 24, display: 'flex', justifyContent: 'center' }} 
+                    />
+                  </>
                 ) : (
                   <Empty description="Chưa có câu hỏi nào. Hãy là người đầu tiên đặt câu hỏi!" style={{ marginTop: 64 }} />
                 )}
@@ -1302,41 +1407,58 @@ const ForumPage: React.FC = () => {
                     placeholder="Tìm kiếm thẻ..."
                     prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />}
                     style={{ width: 250 }}
-                    onChange={e => setTagSearch(e.target.value)}
+                    onChange={e => { setTagSearch(e.target.value); setTagsCurrentPage(1); }}
                   />
                 </div>
                 <Paragraph style={{ color: '#525960', fontSize: 15, marginBottom: 24 }}>
                   Thẻ là một danh mục giúp nhóm các câu hỏi có cùng chủ đề lại với nhau. Hãy click vào một thẻ để xem các câu hỏi liên quan.
                 </Paragraph>
-                <Row gutter={[16, 16]}>
-                  {tags.filter(t => t.name.toLowerCase().includes(tagSearch.toLowerCase())).map(t => (
-                    <Col span={8} key={t.id}>
-                      <Card
-                        hoverable
-                        style={{ borderColor: '#e3e6e8', borderRadius: 6 }}
-                        bodyStyle={{ padding: '16px' }}
-                        onClick={() => {
-                          filterByTag(t.slug);
-                          setActiveTab('home');
-                        }}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <Tag color="#e1ecf4" style={{ border: 'none', color: '#39739d', fontWeight: 600, fontSize: 14, padding: '2px 8px', margin: 0 }}>
-                            {t.name}
-                          </Tag>
-                          <Text type="secondary" style={{ fontSize: 13 }}>
-                            {t.post_count} bài viết
-                          </Text>
-                        </div>
-                      </Card>
-                    </Col>
-                  ))}
-                  {tags.filter(t => t.name.toLowerCase().includes(tagSearch.toLowerCase())).length === 0 && (
-                    <Col span={24}>
-                      <Empty description="Không tìm thấy thẻ nào khớp với từ khóa tìm kiếm" />
-                    </Col>
-                  )}
-                </Row>
+                {(() => {
+                  const filtered = tags.filter(t => t.name.toLowerCase().includes(tagSearch.toLowerCase()));
+                  const paginated = filtered.slice((tagsCurrentPage - 1) * 20, tagsCurrentPage * 20);
+                  return (
+                    <>
+                      <Row gutter={[16, 16]}>
+                        {paginated.map(t => (
+                          <Col span={8} key={t.id}>
+                            <Card
+                              style={{ borderColor: '#e3e6e8', borderRadius: 6, cursor: 'pointer' }}
+                              bodyStyle={{ padding: '16px' }}
+                              onClick={() => {
+                                filterByTag(t.slug);
+                                setActiveTab('home');
+                              }}
+                            >
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <Tag color="#e1ecf4" style={{ border: 'none', color: '#39739d', fontWeight: 600, fontSize: 14, padding: '2px 8px', margin: 0 }}>
+                                  {t.name}
+                                </Tag>
+                                <Text type="secondary" style={{ fontSize: 13 }}>
+                                  {t.post_count} bài viết
+                                </Text>
+                              </div>
+                            </Card>
+                          </Col>
+                        ))}
+                        {filtered.length === 0 && (
+                          <Col span={24}>
+                            <Empty description="Không tìm thấy thẻ nào khớp với từ khóa tìm kiếm" />
+                          </Col>
+                        )}
+                      </Row>
+                      {filtered.length > 0 && (
+                        <Pagination
+                          current={tagsCurrentPage}
+                          onChange={setTagsCurrentPage}
+                          pageSize={20}
+                          total={filtered.length}
+                          showSizeChanger={false}
+                          style={{ marginTop: 24, display: 'flex', justifyContent: 'center' }}
+                        />
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             )}
 
@@ -1348,7 +1470,7 @@ const ForumPage: React.FC = () => {
                     placeholder="Tìm kiếm giảng viên, chuyên ngành..."
                     prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />}
                     style={{ width: 280 }}
-                    onChange={e => setLecturerSearch(e.target.value)}
+                    onChange={e => { setLecturerSearch(e.target.value); setLecturersCurrentPage(1); }}
                   />
                 </div>
                 <Paragraph style={{ color: '#525960', fontSize: 15, marginBottom: 24 }}>
@@ -1359,88 +1481,102 @@ const ForumPage: React.FC = () => {
                     <Spin size="large" tip="Đang tải danh sách giảng viên..." />
                   </div>
                 ) : (
-                  <Row gutter={[20, 20]}>
-                    {lecturers.filter(l => 
+                  (() => {
+                    const filtered = lecturers.filter(l => 
                       (l.full_name || l.username).toLowerCase().includes(lecturerSearch.toLowerCase()) ||
                       (l.major || '').toLowerCase().includes(lecturerSearch.toLowerCase()) ||
                       (l.university || '').toLowerCase().includes(lecturerSearch.toLowerCase())
-                    ).map(l => (
-                      <Col span={8} key={l.id}>
-                        <Card
-                          hoverable
-                          style={{ 
-                            borderColor: '#e3e6e8', 
-                            borderRadius: 8, 
-                            height: '100%', 
-                            boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-                            textAlign: 'center'
-                          }}
-                          bodyStyle={{ padding: '24px 16px' }}
-                        >
-                          <div style={{ position: 'relative', display: 'inline-block', marginBottom: 16 }}>
-                            <Avatar 
-                              size={80} 
-                              src={l.avatar} 
-                              icon={<UserOutlined />} 
-                              style={{ border: '3px solid #f48024', boxShadow: '0 2px 8px rgba(244,128,36,0.2)' }}
-                            />
-                            <CheckCircleFilled 
-                              style={{ 
-                                color: '#52c41a', 
-                                fontSize: 20, 
-                                position: 'absolute', 
-                                bottom: 2, 
-                                right: 2, 
-                                backgroundColor: '#fff', 
-                                borderRadius: '50%',
-                                padding: 1
-                              }} 
-                            />
-                          </div>
-                          <Title level={4} style={{ margin: '0 0 4px 0', fontSize: 16, fontWeight: 600 }}>
-                            {l.full_name || l.username}
-                          </Title>
-                          <Tag color="processing" style={{ marginBottom: 12, borderRadius: 4 }}>
-                            Giảng viên xác thực
-                          </Tag>
-                          <Divider style={{ margin: '12px 0' }} />
-                          <div style={{ textAlign: 'left', marginBottom: 16 }}>
-                            <Paragraph style={{ margin: '0 0 6px 0', fontSize: 13 }}>
-                              🏫 <Text strong>Trường:</Text> <span style={{ textTransform: 'capitalize' }}>{l.university || 'N/A'}</span>
-                            </Paragraph>
-                            <Paragraph style={{ margin: '0 0 6px 0', fontSize: 13 }}>
-                              📖 <Text strong>Chuyên ngành:</Text> <span style={{ textTransform: 'capitalize' }}>{l.major || 'Chung'}</span>
-                            </Paragraph>
-                            <Paragraph style={{ margin: '0 0 6px 0', fontSize: 13 }}>
-                              💬 <Text strong>Lượt hỗ trợ:</Text> <Text type="warning" strong>{l.total_answers || 0} câu trả lời</Text>
-                            </Paragraph>
-                          </div>
-                          <Button 
-                            type="primary" 
-                            ghost 
-                            style={{ width: '100%', borderRadius: 4, borderColor: '#f48024', color: '#f48024' }}
-                            onClick={() => {
-                              setIsModalOpen(true);
-                              form.setFieldsValue({
-                                title: `[Hỏi Thầy/Cô ${l.full_name || l.username}] `,
-                              });
-                            }}
-                          >
-                            Đặt câu hỏi trực tiếp
-                          </Button>
-                        </Card>
-                      </Col>
-                    ))}
-                    {lecturers.filter(l => 
-                      (l.full_name || l.username).toLowerCase().includes(lecturerSearch.toLowerCase()) ||
-                      (l.major || '').toLowerCase().includes(lecturerSearch.toLowerCase()) ||
-                      (l.university || '').toLowerCase().includes(lecturerSearch.toLowerCase())
-                    ).length === 0 && (
-                      <Col span={24}>
-                        <Empty description="Không tìm thấy giảng viên nào phù hợp" />
-                      </Col>
-                    )}
-                  </Row>
+                    );
+                    const paginated = filtered.slice((lecturersCurrentPage - 1) * 9, lecturersCurrentPage * 9);
+                    return (
+                      <>
+                        <Row gutter={[20, 20]}>
+                          {paginated.map(l => (
+                            <Col span={8} key={l.id}>
+                              <Card
+                                hoverable
+                                style={{ 
+                                  borderColor: '#e3e6e8', 
+                                  borderRadius: 8, 
+                                  height: '100%', 
+                                  boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+                                  textAlign: 'center'
+                                }}
+                                bodyStyle={{ padding: '24px 16px' }}
+                              >
+                                <div style={{ position: 'relative', display: 'inline-block', marginBottom: 16 }}>
+                                  <Avatar 
+                                    size={80} 
+                                    src={l.avatar} 
+                                    icon={<UserOutlined />} 
+                                    style={{ border: '3px solid #f48024', boxShadow: '0 2px 8px rgba(244,128,36,0.2)' }}
+                                  />
+                                  <CheckCircleFilled 
+                                    style={{ 
+                                      color: '#52c41a', 
+                                      fontSize: 20, 
+                                      position: 'absolute', 
+                                      bottom: 2, 
+                                      right: 2, 
+                                      backgroundColor: '#fff', 
+                                      borderRadius: '50%',
+                                      padding: 1
+                                    }} 
+                                  />
+                                </div>
+                                <Title level={4} style={{ margin: '0 0 4px 0', fontSize: 16, fontWeight: 600 }}>
+                                  {l.full_name || l.username}
+                                </Title>
+                                <Tag color="processing" style={{ marginBottom: 12, borderRadius: 4 }}>
+                                  Giảng viên xác thực
+                                </Tag>
+                                <Divider style={{ margin: '12px 0' }} />
+                                <div style={{ textAlign: 'left', marginBottom: 16 }}>
+                                  <Paragraph style={{ margin: '0 0 6px 0', fontSize: 13 }}>
+                                    🏫 <Text strong>Trường:</Text> <span style={{ textTransform: 'capitalize' }}>{l.university || 'N/A'}</span>
+                                  </Paragraph>
+                                  <Paragraph style={{ margin: '0 0 6px 0', fontSize: 13 }}>
+                                    📖 <Text strong>Chuyên ngành:</Text> <span style={{ textTransform: 'capitalize' }}>{l.major || 'Chung'}</span>
+                                  </Paragraph>
+                                  <Paragraph style={{ margin: '0 0 6px 0', fontSize: 13 }}>
+                                    💬 <Text strong>Lượt hỗ trợ:</Text> <Text type="warning" strong>{l.total_answers || 0} câu trả lời</Text>
+                                  </Paragraph>
+                                </div>
+                                <Button 
+                                  type="primary" 
+                                  ghost 
+                                  style={{ width: '100%', borderRadius: 4, borderColor: '#f48024', color: '#f48024' }}
+                                  onClick={() => {
+                                    setIsModalOpen(true);
+                                    form.setFieldsValue({
+                                      title: `[Hỏi Thầy/Cô ${l.full_name || l.username}] `,
+                                    });
+                                  }}
+                                >
+                                  Đặt câu hỏi trực tiếp
+                                </Button>
+                              </Card>
+                            </Col>
+                          ))}
+                          {filtered.length === 0 && (
+                            <Col span={24}>
+                              <Empty description="Không tìm thấy giảng viên nào phù hợp" />
+                            </Col>
+                          )}
+                        </Row>
+                        {filtered.length > 0 && (
+                          <Pagination
+                            current={lecturersCurrentPage}
+                            onChange={setLecturersCurrentPage}
+                            pageSize={9}
+                            total={filtered.length}
+                            showSizeChanger={false}
+                            style={{ marginTop: 24, display: 'flex', justifyContent: 'center' }}
+                          />
+                        )}
+                      </>
+                    );
+                  })()
                 )}
               </div>
             )}
@@ -1477,10 +1613,29 @@ const ForumPage: React.FC = () => {
                     <Divider style={{ margin: '0 0 16px 0' }} />
                     {loading ? (
                       <List loading={true} />
-                    ) : posts.filter(post => post.author_username === user.username).length > 0 ? (
-                      posts.filter(post => post.author_username === user.username).map(post => <PostItem key={post.id} post={post} isMyQuestionsTab={true} />)
                     ) : (
-                      <Empty description="Bạn chưa đăng câu hỏi nào. Hãy đặt câu hỏi học thuật đầu tiên của mình nhé!" style={{ marginTop: 64 }} />
+                      (() => {
+                        const filtered = posts.filter(post => post.author_username === user.username);
+                        const paginated = filtered.slice((myQuestionsCurrentPage - 1) * 15, myQuestionsCurrentPage * 15);
+                        return (
+                          <>
+                            {paginated.map(post => <PostItem key={post.id} post={post} isMyQuestionsTab={true} />)}
+                            {filtered.length > 0 && (
+                              <Pagination
+                                current={myQuestionsCurrentPage}
+                                onChange={setMyQuestionsCurrentPage}
+                                pageSize={15}
+                                total={filtered.length}
+                                showSizeChanger={false}
+                                style={{ marginTop: 24, display: 'flex', justifyContent: 'center' }}
+                              />
+                            )}
+                            {filtered.length === 0 && (
+                              <Empty description="Bạn chưa đăng câu hỏi nào. Hãy đặt câu hỏi học thuật đầu tiên của mình nhé!" style={{ marginTop: 64 }} />
+                            )}
+                          </>
+                        );
+                      })()
                     )}
                   </>
                 )}
@@ -1528,11 +1683,22 @@ const ForumPage: React.FC = () => {
                 style={{ marginTop: 16 }}
               >
                 <List size="small">
-                  <List.Item>
-                    <Text type="secondary">Tổng số câu hỏi:</Text> <Text strong>{posts.length}</Text>
+                  <List.Item style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <Text type="secondary">Câu hỏi:</Text> <Text strong>{totalPostsCount}</Text>
                   </List.Item>
-                  <List.Item>
-                    <Text type="secondary">Thành viên:</Text> <Text strong>128</Text>
+                  <List.Item style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <Text type="secondary">Học sinh:</Text> 
+                    <span>
+                      <Text strong>{studentStats.total}</Text> 
+                      <Text type="success" style={{ fontSize: '12px', marginLeft: 6 }}>({studentStats.online} online)</Text>
+                    </span>
+                  </List.Item>
+                  <List.Item style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <Text type="secondary">Giảng viên:</Text> 
+                    <span>
+                      <Text strong>{lecturerStats.total}</Text> 
+                      <Text type="success" style={{ fontSize: '12px', marginLeft: 6 }}>({lecturerStats.online} online)</Text>
+                    </span>
                   </List.Item>
                 </List>
               </Card>
@@ -1630,9 +1796,15 @@ const ForumPage: React.FC = () => {
               alignItems: 'center'
             }}
           >
-            {activeToast.type === 'WELCOME' ? (
+            {activeToast.actor_avatar ? (
+              <Avatar 
+                size={42} 
+                src={activeToast.actor_avatar.startsWith('http') ? activeToast.actor_avatar : `${BASE_URL}${activeToast.actor_avatar}`} 
+                style={{ flexShrink: 0 }} 
+              />
+            ) : activeToast.type === 'WELCOME' ? (
               <Avatar size={42} style={{ backgroundColor: '#f48024', flexShrink: 0 }} icon={<UserOutlined />} />
-            ) : (activeToast.type === 'REPLY_POST' || activeToast.type === 'REPLY_COMMENT') ? (
+            ) : (activeToast.type === 'REPLY_POST' || activeToast.type === 'REPLY_COMMENT' || activeToast.type === 'NEW_POST') ? (
               activeToast.actor_name ? (
                 <Avatar size={42} style={{ backgroundColor: '#0074cc', flexShrink: 0, fontWeight: 700, fontSize: 18 }}>
                   {activeToast.actor_name.charAt(0).toUpperCase()}

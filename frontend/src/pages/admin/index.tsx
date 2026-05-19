@@ -152,7 +152,14 @@ export default function AdminDashboard() {
                   className="notification-item"
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%' }}>
-                    <Avatar style={{ backgroundColor: '#f48024', flexShrink: 0 }} icon={<UserOutlined />} />
+                    {item.actor_avatar ? (
+                      <Avatar 
+                        src={item.actor_avatar.startsWith('http') ? item.actor_avatar : `${BASE_URL}${item.actor_avatar}`} 
+                        style={{ flexShrink: 0 }} 
+                      />
+                    ) : (
+                      <Avatar style={{ backgroundColor: '#f48024', flexShrink: 0 }} icon={<UserOutlined />} />
+                    )}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 13, color: '#232629', fontWeight: item.is_read ? 400 : 500 }}>{item.message}</div>
                       <div style={{ fontSize: 11, color: '#6a737c', marginTop: 4 }}>{moment(item.created_at).fromNow()}</div>
@@ -196,6 +203,7 @@ export default function AdminDashboard() {
   return (
     <ConfigProvider theme={{ algorithm: theme.defaultAlgorithm, token: { colorPrimary: '#f48024', borderRadius: 4, fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif' } }}>
       <style>{`
+        .ant-popover, .ant-popover-content, .ant-dropdown, .ant-dropdown-menu { transition: none !important; animation: none !important; }
         .notification-item:hover { background-color: #e6f7ff !important; }
         .admin-stat-card { transition: all 0.3s ease; cursor: default; }
         .admin-stat-card:hover { transform: translateY(-4px); box-shadow: 0 8px 24px rgba(0,0,0,0.12) !important; }
@@ -223,7 +231,14 @@ export default function AdminDashboard() {
                       <Button type="text" icon={<BellOutlined style={{ fontSize: 20, color: '#525960' }} />} />
                     </Badge>
                   </Popover>
-                  <Dropdown menu={{ items: userMenuItems }} placement="bottomRight" arrow>
+                  <Dropdown 
+                    menu={{ items: userMenuItems }} 
+                    placement="bottom" 
+                    arrow 
+                    trigger={['click']}
+                    transitionName=""
+                    motion={{ motionName: '' }}
+                  >
                     {user.avatar ? (
                       <Avatar src={user.avatar.startsWith('http') ? user.avatar : `${BASE_URL}${user.avatar}`} style={{ cursor: 'pointer', border: '1px solid #e3e6e8' }} />
                     ) : (
