@@ -3,6 +3,11 @@ import { Layout, Form, notification, ConfigProvider, theme } from 'antd';
 import { history, useLocation } from 'umi';
 import moment from 'moment';
 import 'moment/locale/vi';
+import { ForumHeader } from './components/shared/ForumHeader';
+import { ForumSider } from './components/shared/ForumSider';
+import { PostItem } from './components/feed/PostItem';
+import { CreatePostModal } from './components/feed/CreatePostModal';
+import { SidebarWidgets } from './components/feed/SidebarWidgets';
 
 // Import Types
 import { TagType, Post } from './types';
@@ -76,6 +81,7 @@ const ForumPage: React.FC = () => {
   const [lecturerStats, setLecturerStats] = useState({ total: 8, online: 0 });
 
   const [homeCurrentPage, setHomeCurrentPage] = useState(1);
+  const [hotTopicsPage, setHotTopicsPage] = useState(0);
   const [tagsCurrentPage, setTagsCurrentPage] = useState(1);
   const [lecturersCurrentPage, setLecturersCurrentPage] = useState(1);
   const [myQuestionsCurrentPage, setMyQuestionsCurrentPage] = useState(1);
@@ -267,7 +273,6 @@ const ForumPage: React.FC = () => {
     }
 
     const savedUser = localStorage.getItem('user');
-    let interval: any;
     if (savedUser) {
       setUser(JSON.parse(savedUser));
       fetchNotifications();
@@ -313,26 +318,28 @@ const ForumPage: React.FC = () => {
     localStorage.setItem('search_tags', JSON.stringify(tagsParam));
     
     fetchData({ tag: tagsParam.join(','), search: searchParam });
-    
-    if (editorRef.current) {
-      setEditorTagsAndText(tagsParam, searchParam);
-    }
   }, [location.search]);
-
-  useEffect(() => {
-    if (activeToast) {
-      const timer = setTimeout(() => {
-        setActiveToast(null);
-      }, 3500);
-      return () => clearTimeout(timer);
-    }
-  }, [activeToast]);
 
   useEffect(() => {
     if (activeTab === 'lecturers') {
       fetchLecturers();
     }
   }, [activeTab]);
+
+  useEffect(() => {
+    if (!posts || posts.length === 0) return;
+    
+    const interval = setInterval(() => {
+      setHotTopicsPage(prev => {
+        const nextPage = prev + 1;
+        return nextPage > 3 ? 0 : nextPage;
+      });
+    }, 3000);
+    
+    return () => {
+      clearInterval(interval);
+    };
+  }, [posts]);
 
   const handleCreatePost = async (values: any) => {
     const token = localStorage.getItem('access_token');
