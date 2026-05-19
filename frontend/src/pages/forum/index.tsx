@@ -1,3 +1,4 @@
+// Senior FE Carousel Implementation
 import React, { useState, useEffect } from 'react';
 import { 
   Layout, 
@@ -45,11 +46,18 @@ import {
   CloseCircleFilled,
   ExclamationCircleFilled,
   ClockCircleOutlined,
-  MessageOutlined
+  MessageOutlined,
+  LeftOutlined,
+  RightOutlined
 } from '@ant-design/icons';
 import { history, useLocation } from 'umi';
 import moment from 'moment';
 import 'moment/locale/vi';
+import { ForumHeader } from './components/shared/ForumHeader';
+import { ForumSider } from './components/shared/ForumSider';
+import { PostItem } from './components/feed/PostItem';
+import { CreatePostModal } from './components/feed/CreatePostModal';
+import { SidebarWidgets } from './components/feed/SidebarWidgets';
 
 moment.locale('vi');
 moment.updateLocale('vi', {
@@ -95,8 +103,13 @@ interface Post {
   view_count: number;
   score: number;
   is_edited?: boolean;
-  created_at: string;
 }
+
+const getSnippet = (text: string) => {
+  if (!text) return '';
+  const cleanText = text.replace(/<[^>]*>/g, '').replace(/[#*`_]/g, '');
+  return cleanText.length > 80 ? cleanText.substring(0, 80) + '...' : cleanText;
+};
 
 const getRoleBadge = (role?: string, isVerified?: boolean) => {
   if (role === 'LECTURER') {
@@ -157,6 +170,7 @@ const ForumPage: React.FC = () => {
   const [lecturerStats, setLecturerStats] = useState({ total: 8, online: 2 });
 
   const [homeCurrentPage, setHomeCurrentPage] = useState(1);
+  const [hotTopicsPage, setHotTopicsPage] = useState(0);
   const [tagsCurrentPage, setTagsCurrentPage] = useState(1);
   const [lecturersCurrentPage, setLecturersCurrentPage] = useState(1);
   const [myQuestionsCurrentPage, setMyQuestionsCurrentPage] = useState(1);
@@ -254,104 +268,6 @@ const ForumPage: React.FC = () => {
     }
   };
 
-  const triggerRealtimeToast = (item: any) => {
-    setActiveToast({
-      id: item.id,
-      type: item.notification_type,
-      message: item.message,
-      target_post_id: item.target_post_id,
-      actor_name: item.actor_name,
-      actor_avatar: item.actor_avatar
-    });
-  };
-
-  const fetchNotifications = async () => {
-    const token = localStorage.getItem('access_token');
-    if (!token) return;
-    try {
-      const res = await fetch(`${BASE_URL}/api/notifications/`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setNotifications(data);
-        const unread = data.filter((n: any) => !n.is_read).length;
-        setUnreadCount(unread);
-
-        // Phát hiện và hiển thị Toast kiểu Facebook cho thông báo mới
-        data.forEach((item: any) => {
-          if (!item.is_read && !notifiedIdsRef.current.has(item.id)) {
-            notifiedIdsRef.current.add(item.id);
-            if (!isFirstLoadRef.current) {
-              triggerRealtimeToast(item);
-            }
-          }
-        });
-
-        if (isFirstLoadRef.current) {
-          data.forEach((item: any) => {
-            if (!item.is_read) {
-              notifiedIdsRef.current.add(item.id);
-            }
-          });
-          isFirstLoadRef.current = false;
-        }
-      }
-    } catch (e) {
-      console.error('Lỗi tải thông báo', e);
-    }
-  };
-
-  const handleReadNotification = async (notificationItem: any) => {
-    if (!notificationItem.is_read) {
-      const token = localStorage.getItem('access_token');
-      try {
-        await fetch(`${BASE_URL}/api/notifications/${notificationItem.id}/`, {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({ is_read: true })
-        });
-        setNotifications(prev => 
-          prev.map(n => n.id === notificationItem.id ? { ...n, is_read: true } : n)
-        );
-        setUnreadCount(c => Math.max(0, c - 1));
-      } catch (e) {
-        console.error(e);
-      }
-    }
-    
-    // Tự động đóng toast nếu có
-    notification.destroy(notificationItem.id);
-
-    if (notificationItem.target_post_id) {
-      history.push(`/forum/post/${notificationItem.target_post_id}`);
-    }
-  };
-
-  const handleMarkAllAsRead = async () => {
-    const token = localStorage.getItem('access_token');
-    try {
-      const res = await fetch(`${BASE_URL}/api/notifications/mark_all_as_read/`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        // Tắt tất cả các toasts đang hiển thị
-        notifications.forEach(n => {
-          notification.destroy(n.id);
-        });
-        setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
-        setUnreadCount(0);
-        showSuccess('Đã đánh dấu tất cả thông báo là đã đọc');
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
   useEffect(() => {
     const pendingToastSuccess = localStorage.getItem('trigger_toast_success');
     if (pendingToastSuccess) {
@@ -365,13 +281,8 @@ const ForumPage: React.FC = () => {
     }
 
     const savedUser = localStorage.getItem('user');
-    let interval: any;
     if (savedUser) {
       setUser(JSON.parse(savedUser));
-      fetchNotifications();
-      
-      // Kiểm tra thông báo mới mỗi 10 giây
-      interval = setInterval(fetchNotifications, 10000);
     }
     fetchTags();
     fetchTotalPostsCount();
@@ -405,7 +316,6 @@ const ForumPage: React.FC = () => {
     }, 8000);
 
     return () => {
-      if (interval) clearInterval(interval);
       clearInterval(statsInterval);
     };
   }, []);
@@ -419,34 +329,33 @@ const ForumPage: React.FC = () => {
     setSelectedTags(tagsParam);
     setHomeCurrentPage(1);
     
-    const fullText = tagsParam.map(t => `#${t}`).join(' ') + (tagsParam.length > 0 && searchParam ? ' ' : '') + searchParam;
-    setFullSearchText(fullText);
-    
     // Lưu vào localStorage để các trang khác đồng bộ
     localStorage.setItem('search_query', searchParam);
     localStorage.setItem('search_tags', JSON.stringify(tagsParam));
     
     fetchData({ tag: tagsParam.join(','), search: searchParam });
-    
-    if (editorRef.current) {
-      setEditorTagsAndText(tagsParam, searchParam);
-    }
   }, [location.search]);
-
-  useEffect(() => {
-    if (activeToast) {
-      const timer = setTimeout(() => {
-        setActiveToast(null);
-      }, 3500);
-      return () => clearTimeout(timer);
-    }
-  }, [activeToast]);
 
   useEffect(() => {
     if (activeTab === 'lecturers') {
       fetchLecturers();
     }
   }, [activeTab]);
+
+  useEffect(() => {
+    if (!posts || posts.length === 0) return;
+    
+    const interval = setInterval(() => {
+      setHotTopicsPage(prev => {
+        const nextPage = prev + 1;
+        return nextPage > 3 ? 0 : nextPage;
+      });
+    }, 3000);
+    
+    return () => {
+      clearInterval(interval);
+    };
+  }, [posts]);
 
   const handleCreatePost = async (values: any) => {
     const token = localStorage.getItem('access_token');
@@ -861,238 +770,7 @@ const ForumPage: React.FC = () => {
     { key: 'logout', icon: <LogoutOutlined />, label: 'Đăng xuất', onClick: handleLogout },
   ];
 
-  const PostItem = ({ post, isMyQuestionsTab }: { post: Post; isMyQuestionsTab?: boolean }) => (
-    <div className="post-item-card" style={{ padding: '16px 12px', borderBottom: '1px solid #eff0f1', borderRadius: '6px', transition: 'all 0.3s ease' }}>
-      <Row gutter={16}>
-        <Col span={4} style={{ textAlign: 'right', color: '#6a737c' }}>
-          <div style={{ marginBottom: 8 }}>
-            <Text 
-              strong 
-              style={{ 
-                color: post.score > 0 ? '#5eba7d' : post.score < 0 ? '#d12d2d' : '#0c0d0e' 
-              }}
-            >
-              {post.score}
-            </Text> 
-            <Text 
-              style={{ 
-                fontSize: '12px',
-                color: post.score > 0 ? '#5eba7d' : post.score < 0 ? '#d12d2d' : '#6a737c',
-                marginLeft: 4
-              }}
-            >
-              votes
-            </Text>
-          </div>
-          <div style={{ border: '1px solid #5eba7d', borderRadius: 3, padding: '2px 4px', color: '#5eba7d', marginBottom: 8 }}>
-            <Text strong style={{ color: '#5eba7d' }}>{post.comment_count}</Text> <Text style={{ fontSize: '12px', color: '#5eba7d' }}>câu trả lời</Text>
-          </div>
-          <div style={{ fontSize: 12, marginBottom: 4 }}>
-            <EyeOutlined /> {post.view_count} lượt xem
-          </div>
-          <div style={{ fontSize: 12, color: '#6a737c' }}>
-            <ClockCircleOutlined /> {moment(post.created_at).fromNow()}
-          </div>
-        </Col>
-        <Col span={20} style={{ display: 'flex', flexDirection: 'column' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%' }}>
-            <Title level={4} style={{ marginTop: 0, marginBottom: 4, flex: 1, marginRight: 16 }}>
-              <a
-                className="post-title-link"
-                style={{ color: '#0074cc', fontSize: 17, fontWeight: 400, cursor: 'pointer' }}
-                onClick={() => history.push(`/forum/post/${post.id}`)}
-              >
-                {post.title}
-              </a>
-            </Title>
-            {post.is_edited && (
-              <span style={{ fontSize: 11, fontStyle: 'italic', color: '#f48024', backgroundColor: '#fff8f2', padding: '1px 6px', borderRadius: 4, border: '1px solid #fce3cf', userSelect: 'none', flexShrink: 0 }}>
-                đã chỉnh sửa
-              </span>
-            )}
-          </div>
-          <Paragraph ellipsis={{ rows: 2 }} style={{ color: '#3c4146', marginBottom: 8, flexGrow: 1 }}>
-            {post.content}
-          </Paragraph>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', paddingTop: 4 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <Space size={4}>
-                {post.tags.map(t => (
-                  <Tag 
-                    key={t.id} 
-                    style={{ 
-                      backgroundColor: '#e1ecf4', 
-                      color: '#39739d', 
-                      border: 'none', 
-                      cursor: 'pointer' 
-                    }}
-                    onClick={() => filterByTag(t.slug)}
-                  >
-                    {t.name}
-                  </Tag>
-                ))}
-              </Space>
-            </div>
-            {isMyQuestionsTab ? (
-              <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
-                <a 
-                  style={{ color: '#0074cc', fontSize: 13, fontWeight: 500 }}
-                  onClick={() => handleStartEditPost(post)}
-                >
-                  Chỉnh sửa
-                </a>
-                <span style={{ color: '#d6d9dc' }}>|</span>
-                <a 
-                  style={{ color: '#c02d2d', fontSize: 13, fontWeight: 500 }}
-                  onClick={() => handleDeletePost(post.id)}
-                >
-                  Xóa
-                </a>
-              </div>
-            ) : (
-              <div style={{ fontSize: 12, color: '#6a737c', marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
-                {post.author_avatar ? (
-                  <Avatar 
-                    size="small" 
-                    src={post.author_avatar.startsWith('http') ? post.author_avatar : `http://localhost:8002${post.author_avatar}`} 
-                  />
-                ) : post.author_name ? (
-                  <Avatar 
-                    size="small" 
-                    style={{ 
-                      backgroundColor: post.author_role === 'LECTURER' ? '#0074cc' : '#f48024', 
-                      fontWeight: 700, 
-                      fontSize: 10,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center'
-                    }}
-                  >
-                    {post.author_name.charAt(0).toUpperCase()}
-                  </Avatar>
-                ) : (
-                  <Avatar 
-                    size="small" 
-                    icon={<UserOutlined />} 
-                  />
-                )}
-                <Text 
-                  strong 
-                  style={{ 
-                    color: '#0074cc', 
-                    maxWidth: 120, 
-                    overflow: 'hidden', 
-                    textOverflow: 'ellipsis', 
-                    whiteSpace: 'nowrap',
-                    display: 'inline-block',
-                    verticalAlign: 'middle'
-                  }}
-                  title={post.author_name}
-                >
-                  {post.author_name}
-                </Text>
-                
-                {getRoleBadge(post.author_role, post.author_is_verified)}
-              </div>
-            )}
-          </div>
-        </Col>
-      </Row>
-    </div>
-  );
 
-  const notificationContent = (
-    <div style={{ width: 360 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, paddingBottom: 8, borderBottom: '1px solid #f0f0f0' }}>
-        <Text strong style={{ fontSize: 16 }}>Thông báo</Text>
-        {unreadCount > 0 && (
-          <a onClick={handleMarkAllAsRead} className="notification-action-link">
-            Đánh dấu tất cả đã đọc
-          </a>
-        )}
-      </div>
-      <div style={{ maxHeight: 320, overflowY: 'auto' }}>
-        {notifications.length > 0 ? (
-          <>
-            <List
-              itemLayout="horizontal"
-              dataSource={notifications.slice(0, notificationLimit)}
-              renderItem={(item) => (
-                <List.Item
-                  onClick={() => handleReadNotification(item)}
-                  style={{
-                    cursor: 'pointer',
-                    padding: '10px 12px',
-                    borderRadius: 4,
-                    backgroundColor: item.is_read ? '#fff' : '#f0f8ff',
-                    transition: 'background-color 0.2s',
-                    marginBottom: 4,
-                    border: 'none',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 12
-                  }}
-                  className="notification-item"
-                >
-                  {item.actor_avatar ? (
-                    <Avatar 
-                      src={item.actor_avatar.startsWith('http') ? item.actor_avatar : `${BASE_URL}${item.actor_avatar}`} 
-                      style={{ flexShrink: 0 }} 
-                    />
-                  ) : (
-                    <Avatar 
-                      style={{ backgroundColor: item.notification_type === 'WELCOME' ? '#f48024' : '#0074cc', flexShrink: 0 }}
-                      icon={<UserOutlined />}
-                    />
-                  )}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ 
-                      fontSize: 13, 
-                      color: '#232629', 
-                      lineHeight: 1.4,
-                      fontWeight: item.is_read ? 400 : 500 
-                    }}>
-                      {item.message}
-                    </div>
-                    <div style={{ fontSize: 11, color: '#6a737c', marginTop: 4 }}>
-                      {moment(item.created_at).fromNow()}
-                    </div>
-                  </div>
-                  {!item.is_read && (
-                    <div style={{ 
-                      width: 8, 
-                      height: 8, 
-                      borderRadius: '50%', 
-                      backgroundColor: '#f48024', 
-                      flexShrink: 0 
-                    }} />
-                  )}
-                </List.Item>
-              )}
-            />
-            {notifications.length > notificationLimit && (
-              <div style={{ textAlign: 'center', padding: '4px 0', borderTop: '1px solid #f0f0f0', marginTop: 4 }}>
-                <Button 
-                  type="text" 
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setNotificationLimit(prev => prev + 10);
-                  }}
-                  className="notification-more-btn"
-                >
-                  Xem thêm
-                </Button>
-              </div>
-            )}
-          </>
-        ) : (
-          <div style={{ padding: '24px 0', textAlign: 'center' }}>
-            <Empty description="Không có thông báo nào" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-          </div>
-        )}
-      </div>
-    </div>
-  );
 
   return (
     <ConfigProvider 
@@ -1106,270 +784,19 @@ const ForumPage: React.FC = () => {
       }}
     >
       <Layout style={{ minHeight: '100vh', background: '#fff' }}>
-        <Header style={{ 
-          background: '#fff', 
-          borderTop: '3px solid #f48024', 
-          boxShadow: '0 1px 2px rgba(0,0,0,0.05)', 
-          padding: 0,
-          height: 56,
-          display: 'flex',
-          alignItems: 'center',
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          width: '100%',
-          zIndex: 1000
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', width: '100%', maxWidth: 1264, margin: '0 auto' }}>
-            <div 
-              style={{ fontSize: 22, fontWeight: 800, color: '#000', cursor: 'pointer', display: 'flex', alignItems: 'center', width: 164 }}
-              onClick={() => { filterByTag(null); history.push('/forum'); }}
-            >
-              <img src="/favicon.png" alt="EduForum Logo" style={{ height: 28, marginRight: 8, objectFit: 'contain' }} />
-              <span>edu<Text strong style={{ color: '#f48024' }}>forum</Text></span>
-            </div>
-
-            <div style={{ flex: 1, padding: '0 24px 0 0', margin: '0 0 0 46px', display: 'flex', alignItems: 'center', maxWidth: 800 }}>
-            <style>{`
-              .forum-search-editor {
-                position: relative;
-                border: 1px solid #d9d9d9;
-                border-radius: 3px 0 0 3px;
-                padding: 4px 11px;
-                height: 32px;
-                box-sizing: border-box;
-                white-space: nowrap;
-                overflow-x: auto;
-                overflow-y: hidden;
-                outline: none;
-                background-color: #fff;
-                flex: 1;
-                min-width: 0;
-                width: 0;
-                cursor: text;
-                font-size: 14px;
-                line-height: 22px;
-                transition: all 0.3s;
-                -ms-overflow-style: none;  /* IE and Edge */
-                scrollbar-width: none;  /* Firefox */
-              }
-              .forum-search-editor::-webkit-scrollbar {
-                display: none; /* Chrome, Safari and Opera */
-              }
-              .forum-search-editor:hover {
-                border-color: #f48024;
-              }
-              .forum-search-editor:focus {
-                border-color: #f48024;
-                box-shadow: 0 0 0 2px rgba(244, 128, 36, 0.2);
-              }
-              .forum-search-editor.show-placeholder:before {
-                content: attr(placeholder);
-                color: #bfbfbf;
-                cursor: text;
-                pointer-events: none;
-                position: absolute;
-                left: 11px;
-                top: 4px;
-              }
-              .forum-search-tag {
-                background-color: #e1ecf4;
-                color: #39739d;
-                border-radius: 2px;
-                padding: 0 6px;
-                margin: 0 2px;
-                display: inline-block;
-                font-weight: 500;
-                user-select: none;
-              }
-              .forum-search-tag:hover {
-                background-color: #d0e3f0;
-              }
-              .notification-item:hover {
-                background-color: #e6f7ff !important;
-              }
-              .notification-action-link {
-                color: #f48024 !important;
-                font-size: 13px;
-                transition: color 0.2s;
-              }
-              .notification-action-link:hover {
-                color: #e06d0f !important;
-              }
-              .notification-more-btn {
-                color: #f48024 !important;
-                font-weight: 500;
-                font-size: 13px;
-                width: 100%;
-                padding: 4px 0;
-                transition: all 0.2s;
-              }
-              .notification-more-btn:hover {
-                color: #e06d0f !important;
-                background-color: #fdf6f0 !important;
-              }
-              .ant-popover, .ant-popover-content, .ant-dropdown, .ant-dropdown-menu {
-                transition: none !important;
-                animation: none !important;
-              }
-              .online-dot-pulse {
-                display: inline-block;
-                width: 6px;
-                height: 6px;
-                background-color: #52c41a;
-                border-radius: 50%;
-                margin-right: 6px;
-                box-shadow: 0 0 0 0 rgba(82, 196, 26, 0.7);
-                animation: pulse 1.6s infinite;
-                vertical-align: middle;
-              }
-              @keyframes pulse {
-                0% {
-                  transform: scale(0.95);
-                  box-shadow: 0 0 0 0 rgba(82, 196, 26, 0.7);
-                }
-                70% {
-                  transform: scale(1);
-                  box-shadow: 0 0 0 5px rgba(82, 196, 26, 0);
-                }
-                100% {
-                  transform: scale(0.95);
-                  box-shadow: 0 0 0 0 rgba(82, 196, 26, 0);
-                }
-              }
-              .post-item-card:hover {
-                background-color: #fafbfc;
-                transform: translateY(-1px);
-                box-shadow: 0 4px 12px rgba(0,0,0,0.02);
-              }
-              .post-title-link:hover {
-                text-decoration: underline !important;
-              }
-            `}</style>
-            <div
-              ref={editorRef}
-              className={`forum-search-editor ${editorEmpty ? 'show-placeholder' : ''}`}
-              contentEditable
-              onInput={handleEditorInput}
-              onKeyDown={handleEditorKeyDown}
-              onFocus={() => setIsFocused(true)}
-              onBlur={() => setIsFocused(false)}
-              placeholder="Tìm kiếm... (Sử dụng #tag để lọc theo thẻ)"
-              style={{
-                borderColor: isFocused ? '#f48024' : '#d9d9d9',
-                boxShadow: isFocused ? '0 0 0 2px rgba(244, 128, 36, 0.2)' : 'none',
-              }}
-            />
-            <Button 
-              type="primary" 
-              icon={<SearchOutlined />} 
-              onClick={executeSearch}
-              style={{ 
-                backgroundColor: '#f48024', 
-                borderColor: '#f48024', 
-                borderTopLeftRadius: 0, 
-                borderBottomLeftRadius: 0,
-                height: 32,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}
-            />
-          </div>
-
-          <Space size={20}>
-            {user ? (
-              <>
-                <Popover
-                  content={notificationContent}
-                  title={null}
-                  trigger="click"
-                  placement="bottom"
-                  overlayClassName="notification-popover"
-                  transitionName=""
-                  motion={{ motionName: '' }}
-                  getPopupContainer={(triggerNode) => triggerNode.parentElement || document.body}
-                >
-                  <Badge count={unreadCount} size="small" overflowCount={99}>
-                    <Button type="text" icon={<BellOutlined style={{ fontSize: 20, color: '#525960' }} />} />
-                  </Badge>
-                </Popover>
-                  <Dropdown 
-                    menu={{ items: userMenuItems }} 
-                    placement="bottom" 
-                    arrow 
-                    trigger={['click']}
-                    transitionName=""
-                    motion={{ motionName: '' }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: 8 }}>
-                      {user && user.avatar ? (
-                        <Avatar 
-                          src={user.avatar.startsWith('http') ? user.avatar : `${BASE_URL}${user.avatar}`} 
-                          style={{ border: '1px solid #e3e6e8' }} 
-                        />
-                      ) : user && user.username ? (
-                        <Avatar 
-                          style={{ backgroundColor: '#f48024', fontWeight: 700, fontSize: 18 }}
-                        >
-                          {user.username.charAt(0).toUpperCase()}
-                        </Avatar>
-                      ) : (
-                        <Avatar 
-                          style={{ backgroundColor: '#f48024' }} 
-                          icon={<UserOutlined />} 
-                        />
-                      )}
-                      <span 
-                        style={{ 
-                          fontWeight: 500, 
-                          color: '#3c4146', 
-                          fontSize: 14,
-                          maxWidth: 120,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                          display: 'inline-block',
-                          verticalAlign: 'middle'
-                        }}
-                        title={user?.full_name || user?.username}
-                      >
-                        {user?.full_name || user?.username}
-                      </span>
-                    </div>
-                  </Dropdown>
-                </>
-              ) : (
-                <>
-                  <Button onClick={() => history.push('/auth')}>Đăng nhập</Button>
-                  <Button type="primary" onClick={() => history.push('/auth')}>Đăng ký</Button>
-                </>
-              )}
-            </Space>
-          </div>
-        </Header>
+        <ForumHeader user={user} />
 
         <Layout style={{ marginTop: 56, maxWidth: 1264, margin: '56px auto 0', width: '100%', background: '#fff' }}>
-          <Sider width={210} style={{ background: '#fff', borderRight: '1px solid #e3e6e8', position: 'fixed', height: 'calc(100vh - 56px)', left: 'auto' }}>
-            <Menu
-              mode="inline"
-              selectedKeys={[activeTab]}
-              onClick={({ key }) => {
-                if (key === 'home') {
-                  filterByTag(null);
-                  fetchData({ tag: undefined, search: '' });
-                }
-                setActiveTab(key);
-              }}
-              style={{ height: '100%', borderRight: 0, paddingTop: 24 }}
-              items={[
-                { key: 'home', icon: <GlobalOutlined />, label: 'Trang chủ' },
-                { key: 'tags', icon: <TagsOutlined />, label: 'Thẻ phổ biến' },
-                { key: 'lecturers', icon: <UserOutlined />, label: 'Đội ngũ giảng viên' },
-                { key: 'my-questions', icon: <QuestionCircleOutlined />, label: 'Câu hỏi của tôi' },
-              ]}
-            />
-          </Sider>
+          <ForumSider 
+            activeTab={activeTab} 
+            onChangeTab={(key) => {
+              if (key === 'home') {
+                filterByTag(null);
+                fetchData({ tag: undefined, search: '' });
+              }
+              setActiveTab(key);
+            }} 
+          />
 
           <Content style={{ padding: '24px', marginLeft: 210, minHeight: 280, background: '#fff' }}>
             {activeTab === 'home' && (
@@ -1447,69 +874,132 @@ const ForumPage: React.FC = () => {
                 )}
 
                 {!fullSearchText && !selectedTags.length && posts.length > 0 && (
-                  <div style={{ marginBottom: '32px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
-                      <Title level={4} style={{ margin: 0, fontWeight: 600, color: '#2c3e50' }}>
-                        Chủ đề đang thảo luận sôi nổi
-                      </Title>
-                    </div>
-                    <Row gutter={[16, 16]}>
-                      {posts
-                        .slice()
-                        .sort((a, b) => b.score - a.score || b.view_count - a.view_count)
-                        .slice(0, 3)
-                        .map((hotPost, index) => (
-                          <Col xs={24} sm={8} key={hotPost.id}>
-                            <Card
-                              hoverable
-                              onClick={() => history.push(`/forum/post/${hotPost.id}`)}
-                              bodyStyle={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'space-between' }}
-                              style={{ 
-                                height: '160px', 
-                                borderRadius: '8px', 
-                                border: '1px solid #e3e6e8',
-                                transition: 'all 0.3s ease'
-                              }}
-                            >
-                              <div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                                  <Tag color={index === 0 ? "volcano" : index === 1 ? "orange" : "gold"} style={{ fontWeight: 600, borderRadius: '4px' }}>
-                                    Top {index + 1} Hot
-                                  </Tag>
-                                  <Space size={12} style={{ color: '#8c8c8c', fontSize: '12px' }}>
-                                    <span><MessageOutlined /> {hotPost.comment_count || 0}</span>
-                                    <span><FireOutlined /> {hotPost.score || 0}</span>
-                                  </Space>
+                  (() => {
+                    const sortedHotPosts = posts
+                      .filter(Boolean)
+                      .slice()
+                      .sort((a: any, b: any) => ((b.score || 0) - (a.score || 0)) || ((b.view_count || 0) - (a.view_count || 0)));
+                    return (
+                      <div style={{ marginBottom: '32px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                          <Title level={4} style={{ margin: 0, fontWeight: 600, color: '#2c3e50' }}>
+                            Chủ đề đang thảo luận sôi nổi
+                          </Title>
+                          <Space>
+                            <Button 
+                              icon={<LeftOutlined />} 
+                              shape="circle" 
+                              size="small" 
+                              onClick={() => setHotTopicsPage(p => p === 0 ? 3 : p - 1)} 
+                              style={{ borderColor: '#e3e6e8' }}
+                            />
+                            <Button 
+                              icon={<RightOutlined />} 
+                              shape="circle" 
+                              size="small" 
+                              onClick={() => setHotTopicsPage(p => p === 3 ? 0 : p + 1)} 
+                              style={{ borderColor: '#e3e6e8' }}
+                            />
+                          </Space>
+                        </div>
+                        
+                        <div style={{ width: '100%', overflow: 'hidden', position: 'relative' }}>
+                          <div style={{
+                            display: 'flex',
+                            width: '400%',
+                            transform: `translateX(-${hotTopicsPage * 25}%)`,
+                            transition: 'transform 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94)'
+                          }}>
+                            {[0, 1, 2, 3].map(pageIdx => {
+                              const pagePosts = sortedHotPosts.slice(pageIdx * 3, (pageIdx + 1) * 3);
+                              return (
+                                <div key={pageIdx} style={{ width: '25%', padding: '0 4px' }}>
+                                  <Row gutter={[16, 16]}>
+                                    {pagePosts.map((hotPost: any) => (
+                                      <Col xs={24} sm={8} key={hotPost.id}>
+                                        <Card
+                                          onClick={() => history.push(`/forum/post/${hotPost.id}`)}
+                                          bodyStyle={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'space-between' }}
+                                          style={{ 
+                                            height: '170px', 
+                                            borderRadius: '8px', 
+                                            border: '1px solid #e3e6e8',
+                                            cursor: 'pointer',
+                                            backgroundColor: '#fff',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            justifyContent: 'space-between'
+                                          }}
+                                        >
+                                          <div>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                                              <div style={{ display: 'flex', gap: '4px', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', flex: 1, marginRight: '12px' }}>
+                                                {(hotPost.tags || []).slice(0, 2).map((t: any) => (
+                                                  <Tag 
+                                                    key={t.id} 
+                                                    style={{ 
+                                                      backgroundColor: '#e1ecf4', 
+                                                      color: '#39739d', 
+                                                      border: 'none', 
+                                                      margin: 0,
+                                                      fontSize: '10px',
+                                                      padding: '0 4px',
+                                                      borderRadius: '3px'
+                                                    }}
+                                                  >
+                                                    {t.name}
+                                                  </Tag>
+                                                ))}
+                                              </div>
+                                              <Space size={12} style={{ color: '#8c8c8c', fontSize: '12px', flexShrink: 0, marginLeft: 'auto' }}>
+                                                <span><MessageOutlined /> {hotPost.comment_count || 0}</span>
+                                                <span><FireOutlined /> {hotPost.score || 0}</span>
+                                              </Space>
+                                            </div>
+                                            <Title level={5} ellipsis={{ rows: 1 }} style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0074cc', lineHeight: '1.4' }}>
+                                              {hotPost.title}
+                                            </Title>
+                                            <Paragraph style={{ margin: '6px 0 0 0', fontSize: '12px', color: '#718096', lineHeight: '1.5', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                                              {getSnippet(hotPost.content)}
+                                            </Paragraph>
+                                          </div>
+                                          <div style={{ display: 'flex', alignItems: 'center', marginTop: '8px', justifyContent: 'space-between' }}>
+                                            <Text type="secondary" style={{ fontSize: '12px' }}>
+                                              bởi <Text 
+                                                strong 
+                                                style={{ 
+                                                  color: '#4a5568', 
+                                                  maxWidth: 80, 
+                                                  overflow: 'hidden', 
+                                                  textOverflow: 'ellipsis', 
+                                                  whiteSpace: 'nowrap',
+                                                  display: 'inline-block',
+                                                  verticalAlign: 'middle'
+                                                }}
+                                                title={hotPost.author_name || hotPost.author}
+                                              >
+                                                {hotPost.author_name || hotPost.author}
+                                              </Text>
+                                            </Text>
+                                            <span style={{ fontSize: '11px', color: '#a0aec0' }}>{moment(hotPost.created_at).fromNow()}</span>
+                                          </div>
+                                        </Card>
+                                      </Col>
+                                    ))}
+                                    {pagePosts.length < 3 && Array.from({ length: 3 - pagePosts.length }).map((_, i) => (
+                                      <Col xs={24} sm={8} key={`empty-${i}`}>
+                                        <div style={{ height: '170px' }} />
+                                      </Col>
+                                    ))}
+                                  </Row>
                                 </div>
-                                <Title level={5} ellipsis={{ rows: 2 }} style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#2d3748', lineHeight: '1.4' }}>
-                                  {hotPost.title}
-                                </Title>
-                              </div>
-                              <div style={{ display: 'flex', alignItems: 'center', marginTop: '12px', justifyContent: 'space-between' }}>
-                                <Text type="secondary" style={{ fontSize: '12px' }}>
-                                  bởi <Text 
-                                    strong 
-                                    style={{ 
-                                      color: '#4a5568', 
-                                      maxWidth: 80, 
-                                      overflow: 'hidden', 
-                                      textOverflow: 'ellipsis', 
-                                      whiteSpace: 'nowrap',
-                                      display: 'inline-block',
-                                      verticalAlign: 'middle'
-                                    }}
-                                    title={hotPost.author_name || hotPost.author}
-                                  >
-                                    {hotPost.author_name || hotPost.author}
-                                  </Text>
-                                </Text>
-                                <span style={{ fontSize: '11px', color: '#a0aec0' }}>{moment(hotPost.created_at).fromNow()}</span>
-                              </div>
-                            </Card>
-                          </Col>
-                        ))}
-                    </Row>
-                  </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()
                 )}
 
                 <div style={{
@@ -1854,233 +1344,29 @@ const ForumPage: React.FC = () => {
           </Content>
 
           {(activeTab === 'home' || activeTab === 'my-questions') && (
-            <Sider width={300} style={{ background: '#fff', padding: '24px 0 24px 24px' }}>
-              <Card 
-                title={<span style={{ display: 'flex', alignItems: 'center' }}><TagsOutlined style={{ marginRight: 8, color: '#f48024' }} /> Thẻ phổ biến</span>}
-                size="small"
-                bordered={true}
-                style={{ 
-                  backgroundColor: '#fdfaf2', 
-                  borderColor: '#f5e8c7',
-                  borderRadius: '8px',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.02)'
-                }}
-                headStyle={{ 
-                  backgroundColor: '#faf4e1', 
-                  borderBottom: '1px solid #f5e8c7',
-                  borderRadius: '8px 8px 0 0'
-                }}
-              >
-                <Space wrap size={[4, 8]}>
-                  {tags.map(t => (
-                    <Tag 
-                      key={t.id} 
-                      style={{ 
-                        backgroundColor: '#e1ecf4', 
-                        color: '#39739d', 
-                        border: 'none', 
-                        cursor: 'pointer',
-                        margin: '2px' 
-                      }}
-                      onClick={() => {
-                        filterByTag(t.slug);
-                        setActiveTab('home');
-                      }}
-                    >
-                      {t.name} x {t.post_count}
-                    </Tag>
-                  ))}
-                </Space>
-                <div style={{ marginTop: 12 }}>
-                  <Button type="link" style={{ padding: 0 }} onClick={() => setActiveTab('tags')}>Xem tất cả thẻ</Button>
-                </div>
-              </Card>
-
-              <Card 
-                id="forum-stats-widget"
-                title={<span style={{ display: 'flex', alignItems: 'center' }}><GlobalOutlined style={{ marginRight: 8, color: '#f48024' }} /> Thống kê diễn đàn</span>} 
-                size="small" 
-                style={{ 
-                  marginTop: 16, 
-                  borderRadius: '8px', 
-                  border: '1px solid #e3e6e8',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.03)'
-                }}
-              >
-                <List size="small">
-                  <List.Item style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #f1f2f6', padding: '10px 0' }}>
-                    <Text type="secondary" style={{ fontSize: '13px' }}>Câu hỏi:</Text> <Text strong style={{ color: '#2c3e50', fontSize: '14px' }}>{totalPostsCount}</Text>
-                  </List.Item>
-                  <List.Item style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #f1f2f6', padding: '10px 0' }}>
-                    <Text type="secondary" style={{ fontSize: '13px' }}>Học sinh:</Text> 
-                    <span style={{ display: 'inline-flex', alignItems: 'center' }}>
-                      <Text strong style={{ color: '#2c3e50', fontSize: '14px' }}>{studentStats.total}</Text> 
-                      <Text type="success" style={{ fontSize: '12px', marginLeft: 8, backgroundColor: '#f6ffed', border: '1px solid #b7eb8f', padding: '1px 6px', borderRadius: '4px', display: 'inline-flex', alignItems: 'center' }}>
-                        <span className="online-dot-pulse"></span>
-                        {studentStats.online} online
-                      </Text>
-                    </span>
-                  </List.Item>
-                  <List.Item style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', border: 'none' }}>
-                    <Text type="secondary" style={{ fontSize: '13px' }}>Giảng viên:</Text> 
-                    <span style={{ display: 'inline-flex', alignItems: 'center' }}>
-                      <Text strong style={{ color: '#2c3e50', fontSize: '14px' }}>{lecturerStats.total}</Text> 
-                      <Text type="success" style={{ fontSize: '12px', marginLeft: 8, backgroundColor: '#f6ffed', border: '1px solid #b7eb8f', padding: '1px 6px', borderRadius: '4px', display: 'inline-flex', alignItems: 'center' }}>
-                        <span className="online-dot-pulse"></span>
-                        {lecturerStats.online} online
-                      </Text>
-                    </span>
-                  </List.Item>
-                </List>
-              </Card>
-            </Sider>
+            <SidebarWidgets
+              tags={tags}
+              totalPostsCount={totalPostsCount}
+              studentStats={studentStats}
+              lecturerStats={lecturerStats}
+              filterByTag={filterByTag}
+              setActiveTab={setActiveTab}
+            />
           )}
         </Layout>
 
-        <Modal
-          title={<Title level={3} style={{ margin: 0 }}>{editingPostId ? 'Chỉnh sửa câu hỏi' : 'Đặt câu hỏi cho cộng đồng'}</Title>}
+        <CreatePostModal
           open={isModalOpen}
           onCancel={() => {
             setIsModalOpen(false);
             setEditingPostId(null);
             form.resetFields();
           }}
-          footer={null}
-          width={800}
-          centered
-        >
-          <Paragraph type="secondary">
-            {editingPostId 
-              ? 'Cập nhật lại các thông tin cần thiết cho câu hỏi của bạn.' 
-              : 'Hãy mô tả chi tiết vấn đề của bạn. Một câu hỏi tốt sẽ nhận được câu trả lời nhanh và chính xác hơn.'}
-          </Paragraph>
-          <Form
-            form={form}
-            layout="vertical"
-            onFinish={handleCreatePost}
-            requiredMark={false}
-          >
-            <Form.Item 
-              label={<Text strong>Tiêu đề</Text>} 
-              name="title" 
-              rules={[{ required: true, message: 'Vui lòng nhập tiêu đề!' }]}
-              extra="Nêu rõ nội dung chính của câu hỏi (Ví dụ: Làm sao để cài đặt Docker trên Windows?)"
-            >
-              <Input placeholder="Tiêu đề câu hỏi..." size="large" />
-            </Form.Item>
-
-            <Form.Item 
-              label={<Text strong>Nội dung chi tiết</Text>} 
-              name="content" 
-              rules={[{ required: true, message: 'Vui lòng nhập nội dung!' }]}
-            >
-              <Input.TextArea rows={8} placeholder="Mô tả chi tiết vấn đề, các bước bạn đã thử..." />
-            </Form.Item>
-
-            <Form.Item 
-              label={<Text strong>Thẻ (Tags)</Text>} 
-              name="tags" 
-              extra="Phân cách các thẻ bằng dấu phẩy (Ví dụ: python, django, docker)"
-            >
-              <Input prefix={<TagsOutlined />} placeholder="java, spring-boot, reactjs..." />
-            </Form.Item>
-
-            <div style={{ textAlign: 'right', marginTop: 24 }}>
-              <Space>
-                <Button onClick={() => {
-                  setIsModalOpen(false);
-                  setEditingPostId(null);
-                  form.resetFields();
-                }}>
-                  Hủy
-                </Button>
-                <Button type="primary" htmlType="submit" size="large" loading={loading}>
-                  {editingPostId ? 'Cập nhật' : 'Đăng câu hỏi'}
-                </Button>
-              </Space>
-            </div>
-          </Form>
-        </Modal>
-        {activeToast && (
-          <div 
-            onClick={() => {
-              if (activeToast.type === 'SUCCESS' || activeToast.type === 'ERROR' || activeToast.type === 'WARNING') {
-                setActiveToast(null);
-              } else {
-                handleReadNotification(activeToast);
-                setActiveToast(null);
-              }
-            }}
-            style={{
-              position: 'fixed',
-              bottom: 16,
-              left: 16,
-              width: 300,
-              background: '#fff',
-              borderRadius: 0,
-              border: '1px solid #e3e6e8',
-              padding: '14px 18px',
-              cursor: 'pointer',
-              zIndex: 9999,
-              display: 'flex',
-              gap: 12,
-              alignItems: 'center'
-            }}
-          >
-            {activeToast.actor_avatar ? (
-              <Avatar 
-                size={42} 
-                src={activeToast.actor_avatar.startsWith('http') ? activeToast.actor_avatar : `${BASE_URL}${activeToast.actor_avatar}`} 
-                style={{ flexShrink: 0 }} 
-              />
-            ) : activeToast.type === 'WELCOME' ? (
-              <Avatar size={42} style={{ backgroundColor: '#f48024', flexShrink: 0 }} icon={<UserOutlined />} />
-            ) : (activeToast.type === 'REPLY_POST' || activeToast.type === 'REPLY_COMMENT' || activeToast.type === 'NEW_POST') ? (
-              activeToast.actor_name ? (
-                <Avatar size={42} style={{ backgroundColor: '#0074cc', flexShrink: 0, fontWeight: 700, fontSize: 18 }}>
-                  {activeToast.actor_name.charAt(0).toUpperCase()}
-                </Avatar>
-              ) : (
-                <Avatar size={42} style={{ backgroundColor: '#0074cc', flexShrink: 0 }} icon={<UserOutlined />} />
-              )
-            ) : user && user.avatar ? (
-              <Avatar size={42} src={user.avatar.startsWith('http') ? user.avatar : `${BASE_URL}${user.avatar}`} style={{ flexShrink: 0 }} />
-            ) : user && user.username ? (
-              <Avatar size={42} style={{ backgroundColor: '#f48024', flexShrink: 0, fontWeight: 700, fontSize: 18 }}>
-                {user.username.charAt(0).toUpperCase()}
-              </Avatar>
-            ) : (
-              <Avatar size={42} style={{ backgroundColor: '#f48024', flexShrink: 0 }} icon={<UserOutlined />} />
-            )}
-            <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={{ 
-                fontSize: 14, 
-                fontWeight: 700, 
-                color: activeToast.type === 'SUCCESS' ? '#5eba7d' : 
-                       activeToast.type === 'ERROR' ? '#d12d2d' : '#f48024',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                marginBottom: 2
-              }}>
-                {activeToast.type === 'SUCCESS' ? 'Thành công' :
-                 activeToast.type === 'ERROR' ? 'Thất bại' :
-                 activeToast.type === 'WARNING' ? 'Cảnh báo' : 'Thông báo'}
-              </div>
-              <div style={{ 
-                fontSize: 12.5, 
-                color: '#232629', 
-                lineHeight: 1.4, 
-                display: '-webkit-box', 
-                WebkitLineClamp: 3, 
-                WebkitBoxOrient: 'vertical', 
-                overflow: 'hidden' 
-              }}>
-                {activeToast.message}
-              </div>
-            </div>
-          </div>
-        )}
+          onFinish={handleCreatePost}
+          editingPostId={editingPostId}
+          form={form}
+          loading={loading}
+        />
       </Layout>
     </ConfigProvider>
   );

@@ -1,24 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Layout, Menu, Button, Card, Space, Typography, Avatar, Row, Col, Table,
-  ConfigProvider, theme, Popover, Badge, Dropdown, List, Empty, Tag, Input,
-  Modal, Form, Drawer, Select, Tooltip, Image, Popconfirm
+  Layout, Button, Card, Space, Typography, Avatar, Table,
+  ConfigProvider, theme, Empty, Tag, Input,
+  Modal, Form, Drawer, Select, Tooltip, Image, Popconfirm, message
 } from 'antd';
-import type { MenuProps } from 'antd';
 import {
-  DashboardOutlined, TeamOutlined, FileTextOutlined, UserOutlined,
-  LogoutOutlined, BellOutlined, FireOutlined, SearchOutlined,
-  CheckCircleFilled, EditOutlined, DeleteOutlined, KeyOutlined,
-  ExclamationCircleOutlined, ArrowUpOutlined, LockOutlined,
-  UnlockOutlined, IdcardOutlined, PlusOutlined
+  SearchOutlined, CheckCircleFilled, EditOutlined, DeleteOutlined, KeyOutlined,
+  LockOutlined, UnlockOutlined, IdcardOutlined, PlusOutlined
 } from '@ant-design/icons';
 import { history } from 'umi';
 import moment from 'moment';
 import 'moment/locale/vi';
+import { AdminHeader } from './components/AdminHeader';
+import { AdminSider } from './components/AdminSider';
 
 moment.locale('vi');
 
-const { Header, Content, Sider } = Layout;
+const { Content } = Layout;
 const { Title, Text, Paragraph } = Typography;
 
 export default function AdminUsers() {
@@ -28,12 +26,6 @@ export default function AdminUsers() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRole, setSelectedRole] = useState<string>('ALL');
   
-  // Notifications state
-  const [notifications, setNotifications] = useState<any[]>([]);
-  const [unreadCount, setUnreadCount] = useState<number>(0);
-  const [notificationLimit, setNotificationLimit] = useState<number>(10);
-  const [activeToast, setActiveToast] = useState<{ id: any; type: string; message: string } | null>(null);
-
   // Modals / Drawers state
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditDrawerOpen, setIsEditDrawerOpen] = useState(false);
@@ -45,8 +37,8 @@ export default function AdminUsers() {
 
   const BASE_URL = 'http://localhost:8002';
 
-  const showSuccess = (msg: string) => setActiveToast({ id: Date.now(), type: 'SUCCESS', message: msg });
-  const showError = (msg: string) => setActiveToast({ id: Date.now(), type: 'ERROR', message: msg });
+  const showSuccess = (msg: string) => message.success(msg);
+  const showError = (msg: string) => message.error(msg);
 
   useEffect(() => {
     const savedUser = localStorage.getItem('user');
@@ -56,17 +48,7 @@ export default function AdminUsers() {
     setUser(parsed);
     
     fetchUsers();
-    fetchNotifications();
-    const interval = setInterval(fetchNotifications, 10000);
-    return () => clearInterval(interval);
   }, []);
-
-  useEffect(() => {
-    if (activeToast) {
-      const timer = setTimeout(() => setActiveToast(null), 3500);
-      return () => clearTimeout(timer);
-    }
-  }, [activeToast]);
 
   const fetchUsers = async (search?: string, roleFilter?: string) => {
     const token = localStorage.getItem('access_token');
@@ -104,21 +86,6 @@ export default function AdminUsers() {
       }
     } catch { showError('Lỗi kết nối server'); }
     finally { setLoading(false); }
-  };
-
-  const fetchNotifications = async () => {
-    const token = localStorage.getItem('access_token');
-    if (!token) return;
-    try {
-      const res = await fetch(`${BASE_URL}/api/notifications/`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setNotifications(data);
-        setUnreadCount(data.filter((n: any) => !n.is_read).length);
-      }
-    } catch (e) { console.error(e); }
   };
 
   // ── ACTIONS ──
@@ -363,19 +330,6 @@ export default function AdminUsers() {
     },
   ];
 
-  const handleLogout = () => { localStorage.clear(); history.push('/auth'); };
-
-  const notificationContent = (
-    <div style={{ width: 360 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, paddingBottom: 8, borderBottom: '1px solid #f0f0f0' }}>
-        <Text strong style={{ fontSize: 16 }}>Thông báo</Text>
-      </div>
-      <div style={{ padding: '24px 0', textAlign: 'center' }}>
-        <Empty description="Tính năng đang cập nhật" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-      </div>
-    </div>
-  );
-
   return (
     <ConfigProvider theme={{ algorithm: theme.defaultAlgorithm, token: { colorPrimary: '#f48024', borderRadius: 4, fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif' } }}>
       <style>{`
@@ -385,67 +339,10 @@ export default function AdminUsers() {
         .admin-sider .ant-menu-item:hover { color: #f48024 !important; }
       `}</style>
       <Layout style={{ minHeight: '100vh', background: '#f5f5f5' }}>
-        {/* ── HEADER ── */}
-        <Header style={{ background: '#fff', borderTop: '3px solid #f48024', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', padding: 0, height: 56, display: 'flex', alignItems: 'center', position: 'fixed', top: 0, left: 0, width: '100%', zIndex: 1000 }}>
-          <div style={{ display: 'flex', alignItems: 'center', width: '100%', maxWidth: 1264, margin: '0 auto', padding: '0 24px' }}>
-            <div style={{ fontSize: 22, fontWeight: 800, color: '#000', cursor: 'pointer', display: 'flex', alignItems: 'center' }} onClick={() => history.push('/admin')}>
-              <img src="/favicon.png" alt="EduForum Logo" style={{ height: 28, marginRight: 8, objectFit: 'contain' }} />
-              <span>edu<Text strong style={{ color: '#f48024' }}>forum</Text></span>
-              <Text style={{ fontSize: 12, color: '#f48024', marginLeft: 8, fontWeight: 600, border: '1px solid #f48024', borderRadius: 3, padding: '1px 6px' }}>ADMIN</Text>
-            </div>
-            <div style={{ flex: 1 }} />
-            <Space size={20}>
-              {user && (
-                <>
-                  <Popover content={notificationContent} title={null} trigger="click" placement="bottom">
-                    <Badge count={unreadCount} size="small" overflowCount={99}>
-                      <Button type="text" icon={<BellOutlined style={{ fontSize: 20, color: '#525960' }} />} />
-                    </Badge>
-                  </Popover>
-                  <Dropdown 
-                    menu={{ items: [
-                      { key: 'forum', icon: <FireOutlined />, label: 'Về diễn đàn', onClick: () => history.push('/forum') },
-                      { key: 'profile', icon: <UserOutlined />, label: 'Tài khoản', onClick: () => history.push('/forum/profile') },
-                      { type: 'divider' },
-                      { key: 'logout', icon: <LogoutOutlined />, label: 'Đăng xuất', onClick: handleLogout },
-                    ]}} 
-                    placement="bottom" 
-                    arrow 
-                    trigger={['click']}
-                    transitionName=""
-                    motion={{ motionName: '' }}
-                  >
-                    {user.avatar ? (
-                      <Avatar src={user.avatar.startsWith('http') ? user.avatar : `${BASE_URL}${user.avatar}`} style={{ cursor: 'pointer', border: '1px solid #e3e6e8' }} />
-                    ) : (
-                      <Avatar style={{ backgroundColor: '#f48024', cursor: 'pointer', fontWeight: 700, fontSize: 18 }}>{user.username?.charAt(0).toUpperCase()}</Avatar>
-                    )}
-                  </Dropdown>
-                </>
-              )}
-            </Space>
-          </div>
-        </Header>
+        <AdminHeader user={user} />
 
         <Layout style={{ marginTop: 56 }}>
-          {/* ── SIDER ── */}
-          <Sider width={200} className="admin-sider" style={{ background: '#fff', borderRight: '1px solid #e3e6e8', position: 'fixed', height: 'calc(100vh - 56px)', left: 0, top: 56, zIndex: 100 }}>
-            <Menu
-              mode="inline"
-              defaultSelectedKeys={['users']}
-              style={{ height: '100%', borderRight: 0, paddingTop: 16 }}
-              onClick={({ key }) => {
-                if (key === 'dashboard') history.push('/admin');
-                if (key === 'users') history.push('/admin/users');
-                if (key === 'posts') history.push('/admin/posts');
-              }}
-              items={[
-                { key: 'dashboard', icon: <DashboardOutlined />, label: 'Tổng quan' },
-                { key: 'users', icon: <TeamOutlined />, label: 'Quản lý người dùng' },
-                { key: 'posts', icon: <FileTextOutlined />, label: 'Quản lý bài đăng' },
-              ]}
-            />
-          </Sider>
+          <AdminSider activeKey="users" />
 
           {/* ── CONTENT ── */}
           <Content style={{ marginLeft: 200, padding: 24, minHeight: 'calc(100vh - 56px)' }}>
@@ -573,19 +470,6 @@ export default function AdminUsers() {
               onVisibleChange: (value) => { if (!value) setEvidencePreview(null); }
             }}
           />
-        )}
-
-        {/* ── TOAST ── */}
-        {activeToast && (
-          <div onClick={() => setActiveToast(null)} style={{ position: 'fixed', bottom: 16, left: 16, width: 300, background: '#fff', borderRadius: 0, border: '1px solid #e3e6e8', padding: '14px 18px', cursor: 'pointer', zIndex: 9999, display: 'flex', gap: 12, alignItems: 'center' }}>
-            <Avatar size={42} style={{ backgroundColor: activeToast.type === 'SUCCESS' ? '#52c41a' : '#ff4d4f', flexShrink: 0 }} icon={activeToast.type === 'SUCCESS' ? <ArrowUpOutlined /> : <ExclamationCircleOutlined />} />
-            <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: activeToast.type === 'SUCCESS' ? '#52c41a' : '#ff4d4f' }}>
-                {activeToast.type === 'SUCCESS' ? 'Thành công' : 'Lỗi'}
-              </div>
-              <div style={{ fontSize: 12.5, color: '#232629', lineHeight: 1.4 }}>{activeToast.message}</div>
-            </div>
-          </div>
         )}
       </Layout>
     </ConfigProvider>
