@@ -38,7 +38,8 @@ import {
   BankOutlined,
   ReadOutlined,
   LockOutlined,
-  FireOutlined
+  FireOutlined,
+  SearchOutlined
 } from '@ant-design/icons';
 import { history } from 'umi';
 import moment from 'moment';
@@ -80,6 +81,229 @@ export default function ProfilePage() {
   const notifiedIdsRef = React.useRef<Set<number>>(new Set());
   const isFirstLoadRef = React.useRef(true);
   const [activeToast, setActiveToast] = useState<{ id: any; type: string; message: string; target_post_id?: any } | null>(null);
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const editorRef = React.useRef<HTMLDivElement>(null);
+  const [isFocused, setIsFocused] = useState(false);
+  const [editorEmpty, setEditorEmpty] = useState(true);
+
+  const checkIsEditorEmpty = () => {
+    if (!editorRef.current) return true;
+    const hasTags = editorRef.current.querySelector('.forum-search-tag') !== null;
+    const text = editorRef.current.textContent || '';
+    return !hasTags && text.trim() === '';
+  };
+
+  const setEditorTagsAndText = (tags: string[], text: string) => {
+    if (!editorRef.current) return;
+    editorRef.current.innerHTML = '';
+    tags.forEach(tag => {
+      const tagEl = document.createElement('span');
+      tagEl.className = 'forum-search-tag';
+      tagEl.setAttribute('contenteditable', 'false');
+      tagEl.textContent = `#${tag}`;
+      tagEl.oncontextmenu = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const plainTextNode = document.createTextNode(`#${tag}`);
+        tagEl.parentNode?.replaceChild(plainTextNode, tagEl);
+        const newRange = document.createRange();
+        newRange.setStart(plainTextNode, plainTextNode.length);
+        newRange.setEnd(plainTextNode, plainTextNode.length);
+        const newSel = window.getSelection();
+        newSel?.removeAllRanges();
+        newSel?.addRange(newRange);
+        setEditorEmpty(checkIsEditorEmpty());
+      };
+      editorRef.current?.appendChild(tagEl);
+      editorRef.current?.appendChild(document.createTextNode(' '));
+    });
+    if (text) {
+      editorRef.current.appendChild(document.createTextNode(text));
+    }
+    setEditorEmpty(tags.length === 0 && !text);
+  };
+
+  const packageLooseHashtagsInPlace = (container: HTMLDivElement | null) => {
+    if (!container) return;
+    const hashtagRegex = /(?<=^|\s)#([^\s#]+)(?=$|\s)/g;
+    const textNodes: Text[] = [];
+    const walk = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null);
+    let node: Node | null;
+    while (node = walk.nextNode()) {
+      if (node.parentNode && (node.parentNode as HTMLElement).classList.contains('forum-search-tag')) {
+        continue;
+      }
+      textNodes.push(node as Text);
+    }
+    textNodes.forEach(textNode => {
+      const text = textNode.nodeValue || '';
+      const matches = [...text.matchAll(hashtagRegex)];
+      if (matches.length === 0) return;
+      const parent = textNode.parentNode;
+      if (!parent) return;
+      let lastIdx = 0;
+      const fragment = document.createDocumentFragment();
+      matches.forEach(match => {
+        const matchIdx = match.index || 0;
+        if (matchIdx > lastIdx) {
+          fragment.appendChild(document.createTextNode(text.substring(lastIdx, matchIdx)));
+        }
+        const tagText = match[1];
+        const tagEl = document.createElement('span');
+        tagEl.className = 'forum-search-tag';
+        tagEl.setAttribute('contenteditable', 'false');
+        tagEl.textContent = `#${tagText}`;
+        tagEl.oncontextmenu = (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const plainTextNode = document.createTextNode(`#${tagText}`);
+          tagEl.parentNode?.replaceChild(plainTextNode, tagEl);
+          const newRange = document.createRange();
+          newRange.setStart(plainTextNode, plainTextNode.length);
+          newRange.setEnd(plainTextNode, plainTextNode.length);
+          const newSel = window.getSelection();
+          newSel?.removeAllRanges();
+          newSel?.addRange(newRange);
+          setEditorEmpty(checkIsEditorEmpty());
+        };
+        fragment.appendChild(tagEl);
+        lastIdx = matchIdx + match[0].length;
+      });
+      if (lastIdx < text.length) {
+        fragment.appendChild(document.createTextNode(text.substring(lastIdx)));
+      }
+      parent.replaceChild(fragment, textNode);
+    });
+  };
+
+  const parseContentEditableDOM = (container: HTMLDivElement | null) => {
+    if (!container) return { tags: [], keywords: '' };
+    const tags: string[] = [];
+    let textParts: string[] = [];
+    container.childNodes.forEach(node => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        textParts.push(node.nodeValue || '');
+      } else if (node.nodeType === Node.ELEMENT_NODE) {
+        const el = node as HTMLElement;
+        if (el.classList.contains('forum-search-tag')) {
+          const tagText = el.textContent || '';
+          tags.push(tagText.replace('#', '').toLowerCase());
+        } else {
+          textParts.push(el.textContent || '');
+        }
+      }
+    });
+    const keywords = textParts.join('').replace(/\s+/g, ' ').trim();
+    return { tags: Array.from(new Set(tags)), keywords };
+  };
+
+  const handleEditorInput = (e: React.FormEvent<HTMLDivElement>) => {
+    const selection = window.getSelection();
+    if (!selection || !selection.focusNode) {
+      setEditorEmpty(checkIsEditorEmpty());
+      return;
+    }
+    const node = selection.focusNode;
+    if (node.nodeType !== Node.TEXT_NODE) {
+      setEditorEmpty(checkIsEditorEmpty());
+      return;
+    }
+    const text = node.nodeValue || '';
+    const offset = selection.focusOffset;
+    const textBeforeCaret = text.substring(0, offset);
+    const hashtagMatch = textBeforeCaret.match(/(?:^|\s)#([^\s#]+)\s$/);
+    if (hashtagMatch) {
+      const fullMatch = hashtagMatch[0];
+      const tagText = hashtagMatch[1];
+      const hasLeadingSpace = fullMatch.startsWith(' ');
+      const keepText = textBeforeCaret.substring(0, textBeforeCaret.length - fullMatch.length) + (hasLeadingSpace ? ' ' : '');
+      const afterText = text.substring(offset);
+      node.nodeValue = keepText;
+      const tagEl = document.createElement('span');
+      tagEl.className = 'forum-search-tag';
+      tagEl.setAttribute('contenteditable', 'false');
+      tagEl.textContent = `#${tagText}`;
+      tagEl.oncontextmenu = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const plainTextNode = document.createTextNode(`#${tagText}`);
+        tagEl.parentNode?.replaceChild(plainTextNode, tagEl);
+        const newRange = document.createRange();
+        newRange.setStart(plainTextNode, plainTextNode.length);
+        newRange.setEnd(plainTextNode, plainTextNode.length);
+        const newSel = window.getSelection();
+        newSel?.removeAllRanges();
+        newSel?.addRange(newRange);
+        setEditorEmpty(checkIsEditorEmpty());
+      };
+      const trailingSpaceNode = document.createTextNode(' ' + afterText);
+      const parent = node.parentNode;
+      if (parent) {
+        if (node.nextSibling) {
+          parent.insertBefore(tagEl, node.nextSibling);
+          parent.insertBefore(trailingSpaceNode, tagEl.nextSibling);
+        } else {
+          parent.appendChild(tagEl);
+          parent.appendChild(trailingSpaceNode);
+        }
+        const range = document.createRange();
+        range.setStart(trailingSpaceNode, 1);
+        range.setEnd(trailingSpaceNode, 1);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
+    }
+    setEditorEmpty(checkIsEditorEmpty());
+  };
+
+  const handleEditorKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      executeSearch();
+      return;
+    }
+    if (e.key === 'Backspace') {
+      const selection = window.getSelection();
+      if (selection && selection.focusNode) {
+        const node = selection.focusNode;
+        const offset = selection.focusOffset;
+        if (node.nodeType === Node.TEXT_NODE && offset === 0) {
+          const prevSibling = node.previousSibling as HTMLElement;
+          if (prevSibling && prevSibling.classList && prevSibling.classList.contains('forum-search-tag')) {
+            e.preventDefault();
+            prevSibling.parentNode?.removeChild(prevSibling);
+            setTimeout(() => {
+              setEditorEmpty(checkIsEditorEmpty());
+            }, 0);
+            return;
+          }
+        }
+      }
+    }
+    setTimeout(() => {
+      setEditorEmpty(checkIsEditorEmpty());
+    }, 0);
+  };
+
+  const executeSearch = () => {
+    packageLooseHashtagsInPlace(editorRef.current);
+    const { tags, keywords } = parseContentEditableDOM(editorRef.current);
+    if (editorRef.current) {
+      editorRef.current.blur();
+    }
+    setEditorEmpty(checkIsEditorEmpty());
+    
+    // Save to localStorage
+    localStorage.setItem('search_query', keywords);
+    localStorage.setItem('search_tags', JSON.stringify(tags));
+
+    history.push({
+      pathname: '/forum',
+      search: `?search=${encodeURIComponent(keywords)}&tags=${encodeURIComponent(tags.join(','))}`
+    });
+  };
 
   // Forms
   const [infoForm] = Form.useForm();
@@ -145,6 +369,16 @@ export default function ProfilePage() {
 
     fetchNotifications();
     const interval = setInterval(fetchNotifications, 10000);
+
+    // Đồng bộ ô tìm kiếm từ localStorage
+    const savedSearch = localStorage.getItem('search_query') || '';
+    const savedTags = JSON.parse(localStorage.getItem('search_tags') || '[]');
+    setSearchQuery(savedSearch);
+    setSelectedTags(savedTags);
+    if (editorRef.current) {
+      setEditorTagsAndText(savedTags, savedSearch);
+    }
+
     return () => clearInterval(interval);
   }, []);
 
@@ -197,9 +431,11 @@ export default function ProfilePage() {
   const triggerRealtimeToast = (item: any) => {
     setActiveToast({
       id: item.id,
-      type: 'INFO',
+      type: item.notification_type,
       message: item.message,
-      target_post_id: item.target_post_id
+      target_post_id: item.target_post_id,
+      actor_name: item.actor_name,
+      actor_avatar: item.actor_avatar
     });
   };
 
@@ -226,7 +462,6 @@ export default function ProfilePage() {
   const userMenuItems: MenuProps['items'] = [
     ...(user?.role === 'ADMIN' ? [{ key: 'admin', icon: <SettingOutlined />, label: 'Trang quản trị', onClick: () => history.push('/admin') }] : []),
     { key: 'profile', icon: <UserOutlined />, label: 'Tài khoản', onClick: () => history.push('/forum/profile') },
-    { key: 'settings', icon: <SettingOutlined />, label: 'Cài đặt' },
     { type: 'divider' },
     { key: 'logout', icon: <LogoutOutlined />, label: 'Đăng xuất', onClick: handleLogout },
   ];
@@ -403,7 +638,15 @@ export default function ProfilePage() {
                   }}
                   className="notification-item"
                 >
-                  <Avatar size={36} icon={<UserOutlined />} style={{ backgroundColor: '#f48024', flexShrink: 0 }} />
+                  {item.actor_avatar ? (
+                    <Avatar 
+                      size={36}
+                      src={item.actor_avatar.startsWith('http') ? item.actor_avatar : `${BASE_URL}${item.actor_avatar}`} 
+                      style={{ flexShrink: 0 }} 
+                    />
+                  ) : (
+                    <Avatar size={36} icon={<UserOutlined />} style={{ backgroundColor: '#f48024', flexShrink: 0 }} />
+                  )}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13, color: '#232629', lineHeight: 1.3, marginBottom: 4 }}>
                       {item.message}
@@ -460,6 +703,12 @@ export default function ProfilePage() {
       }}
     >
       <Layout style={{ minHeight: '100vh', background: '#fff' }}>
+        <style>{`
+          .ant-popover, .ant-popover-content, .ant-dropdown, .ant-dropdown-menu {
+            transition: none !important;
+            animation: none !important;
+          }
+        `}</style>
         <Header style={{ 
           background: '#fff', 
           borderTop: '3px solid #f48024', 
@@ -477,13 +726,103 @@ export default function ProfilePage() {
           <div style={{ display: 'flex', alignItems: 'center', width: '100%', maxWidth: 1264, margin: '0 auto' }}>
             <div 
               style={{ fontSize: 22, fontWeight: 800, color: '#000', cursor: 'pointer', display: 'flex', alignItems: 'center', width: 164 }}
-              onClick={() => history.push('/forum')}
+              onClick={() => {
+                localStorage.removeItem('search_query');
+                localStorage.removeItem('search_tags');
+                history.push('/forum');
+              }}
             >
-              <FireOutlined style={{ color: '#f48024', marginRight: 4 }} />
+              <img src="/favicon.png" alt="EduForum Logo" style={{ height: 28, marginRight: 8, objectFit: 'contain' }} />
               <span>edu<Text strong style={{ color: '#f48024' }}>forum</Text></span>
             </div>
 
-            <div style={{ flex: 1 }} />
+            <div style={{ flex: 1, padding: '0 24px 0 0', margin: '0 0 0 46px', display: 'flex', alignItems: 'center', maxWidth: 800 }}>
+              <style>{`
+                .forum-search-editor {
+                  position: relative;
+                  border: 1px solid #d9d9d9;
+                  border-radius: 3px 0 0 3px;
+                  padding: 4px 11px;
+                  height: 32px;
+                  box-sizing: border-box;
+                  white-space: nowrap;
+                  overflow-x: auto;
+                  overflow-y: hidden;
+                  outline: none;
+                  background-color: #fff;
+                  flex: 1;
+                  min-width: 0;
+                  width: 0;
+                  cursor: text;
+                  font-size: 14px;
+                  line-height: 22px;
+                  transition: all 0.3s;
+                  -ms-overflow-style: none;  /* IE and Edge */
+                  scrollbar-width: none;  /* Firefox */
+                }
+                .forum-search-editor::-webkit-scrollbar {
+                  display: none; /* Chrome, Safari and Opera */
+                }
+                .forum-search-editor:hover {
+                  border-color: #f48024;
+                }
+                .forum-search-editor:focus {
+                  border-color: #f48024;
+                  box-shadow: 0 0 0 2px rgba(244, 128, 36, 0.2);
+                }
+                .forum-search-editor.show-placeholder:before {
+                  content: attr(placeholder);
+                  color: #bfbfbf;
+                  cursor: text;
+                  pointer-events: none;
+                  position: absolute;
+                  left: 11px;
+                  top: 4px;
+                }
+                .forum-search-tag {
+                  background-color: #e1ecf4;
+                  color: #39739d;
+                  border-radius: 2px;
+                  padding: 0 6px;
+                  margin: 0 2px;
+                  display: inline-block;
+                  font-weight: 500;
+                  user-select: none;
+                }
+                .forum-search-tag:hover {
+                  background-color: #d0e3f0;
+                }
+              `}</style>
+              <div
+                ref={editorRef}
+                className={`forum-search-editor ${editorEmpty ? 'show-placeholder' : ''}`}
+                contentEditable
+                onInput={handleEditorInput}
+                onKeyDown={handleEditorKeyDown}
+                onFocus={() => setIsFocused(true)}
+                onBlur={() => setIsFocused(false)}
+                placeholder="Tìm kiếm... (Sử dụng #tag để lọc theo thẻ)"
+                style={{
+                  borderColor: isFocused ? '#f48024' : '#d9d9d9',
+                  boxShadow: isFocused ? '0 0 0 2px rgba(244, 128, 36, 0.2)' : 'none',
+                }}
+              />
+              <Button 
+                type="primary" 
+                icon={<SearchOutlined />} 
+                onClick={executeSearch}
+                style={{ 
+                  backgroundColor: '#f48024', 
+                  borderColor: '#f48024', 
+                  borderTopLeftRadius: 0, 
+                  borderBottomLeftRadius: 0,
+                  height: 32,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              />
+            </div>
 
             <Space size={20}>
               {user && (
@@ -502,18 +841,28 @@ export default function ProfilePage() {
                       <Button type="text" icon={<BellOutlined style={{ fontSize: 20, color: '#525960' }} />} />
                     </Badge>
                   </Popover>
-                  <Dropdown menu={{ items: userMenuItems }} placement="bottomRight" arrow>
-                    {avatarPreview ? (
-                      <Avatar 
-                        src={avatarPreview} 
-                        style={{ cursor: 'pointer', border: '1px solid #e3e6e8' }} 
-                      />
-                    ) : (
-                      <Avatar 
-                        style={{ backgroundColor: '#f48024', cursor: 'pointer' }} 
-                        icon={<UserOutlined />} 
-                      />
-                    )}
+                  <Dropdown 
+                    menu={{ items: userMenuItems }} 
+                    placement="bottom" 
+                    arrow 
+                    trigger={['click']}
+                    transitionName=""
+                    motion={{ motionName: '' }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: 8 }}>
+                      {avatarPreview ? (
+                        <Avatar 
+                          src={avatarPreview} 
+                          style={{ border: '1px solid #e3e6e8' }} 
+                        />
+                      ) : (
+                        <Avatar 
+                          style={{ backgroundColor: '#f48024' }} 
+                          icon={<UserOutlined />} 
+                        />
+                      )}
+                      <span style={{ fontWeight: 500, color: '#3c4146', fontSize: 14 }}>{user?.full_name || user?.username}</span>
+                    </div>
                   </Dropdown>
                 </>
               )}
@@ -522,28 +871,24 @@ export default function ProfilePage() {
         </Header>
 
         <Layout style={{ marginTop: 56, maxWidth: 1264, margin: '56px auto 0', width: '100%', background: '#fff' }}>
-          <Sider width={164} style={{ background: '#fff', borderRight: '1px solid #e3e6e8', position: 'fixed', height: 'calc(100vh - 56px)', left: 'auto' }}>
+          <Sider width={210} style={{ background: '#fff', borderRight: '1px solid #e3e6e8', position: 'fixed', height: 'calc(100vh - 56px)', left: 'auto' }}>
             <Menu
               mode="inline"
-              defaultSelectedKeys={['users']}
+              selectedKeys={[]}
               style={{ height: '100%', borderRight: 0, paddingTop: 24 }}
               onClick={({ key }) => {
-                if (key === 'home' || key === 'questions') {
-                  history.push('/forum');
-                }
+                history.push('/forum');
               }}
               items={[
                 { key: 'home', icon: <GlobalOutlined />, label: 'Trang chủ' },
-                { key: 'public', label: 'CỘNG ĐỒNG', type: 'group', children: [
-                  { key: 'questions', icon: <QuestionCircleOutlined />, label: 'Câu hỏi' },
-                  { key: 'tags', icon: <TagsOutlined />, label: 'Thẻ (Tags)' },
-                  { key: 'users', icon: <UserOutlined />, label: 'Người dùng' },
-                ]}
+                { key: 'tags', icon: <TagsOutlined />, label: 'Thẻ phổ biến' },
+                { key: 'lecturers', icon: <UserOutlined />, label: 'Đội ngũ giảng viên' },
+                { key: 'my-questions', icon: <QuestionCircleOutlined />, label: 'Câu hỏi của tôi' },
               ]}
             />
           </Sider>
 
-          <Content style={{ padding: '24px', marginLeft: 164, minHeight: 280, background: '#fff' }}>
+          <Content style={{ padding: '24px', marginLeft: 210, minHeight: 280, background: '#fff' }}>
             <Row gutter={24}>
               {/* Cột trái: Quản lý ảnh đại diện & Thông tin nhanh */}
               <Col xs={24} md={8}>
@@ -826,10 +1171,22 @@ export default function ProfilePage() {
               alignItems: 'center'
             }}
           >
-            {activeToast.type === 'WELCOME' ? (
+            {activeToast.actor_avatar ? (
+              <Avatar 
+                size={42} 
+                src={activeToast.actor_avatar.startsWith('http') ? activeToast.actor_avatar : `${BASE_URL}${activeToast.actor_avatar}`} 
+                style={{ flexShrink: 0 }} 
+              />
+            ) : activeToast.type === 'WELCOME' ? (
               <Avatar size={42} style={{ backgroundColor: '#f48024', flexShrink: 0 }} icon={<UserOutlined />} />
-            ) : (activeToast.type === 'REPLY_POST' || activeToast.type === 'REPLY_COMMENT') ? (
-              <Avatar size={42} style={{ backgroundColor: '#0074cc', flexShrink: 0 }} icon={<UserOutlined />} />
+            ) : (activeToast.type === 'REPLY_POST' || activeToast.type === 'REPLY_COMMENT' || activeToast.type === 'NEW_POST') ? (
+              activeToast.actor_name ? (
+                <Avatar size={42} style={{ backgroundColor: '#0074cc', flexShrink: 0, fontWeight: 700, fontSize: 18 }}>
+                  {activeToast.actor_name.charAt(0).toUpperCase()}
+                </Avatar>
+              ) : (
+                <Avatar size={42} style={{ backgroundColor: '#0074cc', flexShrink: 0 }} icon={<UserOutlined />} />
+              )
             ) : user && user.avatar ? (
               <Avatar size={42} src={user.avatar.startsWith('http') ? user.avatar : `${BASE_URL}${user.avatar}`} style={{ flexShrink: 0 }} />
             ) : user && user.username ? (

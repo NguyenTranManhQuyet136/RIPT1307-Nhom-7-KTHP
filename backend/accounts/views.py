@@ -194,3 +194,45 @@ class VerifyLecturerView(APIView):
             "success": True,
             "message": f"Đã phê duyệt thành công giảng viên {lecturer.full_name or lecturer.username}!"
         }, status=status.HTTP_200_OK)
+
+class VerifiedLecturersListView(APIView):
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        summary="Danh sách giảng viên đã được xác thực",
+        description="Lấy danh sách công khai toàn bộ giảng viên đã xác thực tài khoản."
+    )
+    def get(self, request):
+        verified_lecturers = User.objects.filter(role='LECTURER', is_verified=True).order_by('-date_joined')
+        data = []
+        for lecturer in verified_lecturers:
+            from comments.models import Comment
+            total_answers = Comment.objects.filter(author=lecturer).count()
+            
+            avatar_url = request.build_absolute_uri(lecturer.avatar.url) if lecturer.avatar else None
+            data.append({
+                "id": lecturer.id,
+                "username": lecturer.username,
+                "email": lecturer.email,
+                "full_name": lecturer.full_name,
+                "university": lecturer.university,
+                "major": lecturer.major,
+                "profile_url": lecturer.profile_url,
+                "avatar": avatar_url,
+                "total_answers": total_answers,
+                "date_joined": lecturer.date_joined
+            })
+        return Response(data, status=status.HTTP_200_OK)
+
+class PublicStatsView(APIView):
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        summary="Thống kê công khai về sinh viên và giảng viên",
+        description="Trả về tổng số học sinh và giảng viên đã được xác thực trong cơ sở dữ liệu."
+    )
+    def get(self, request):
+        return Response({
+            "total_students": User.objects.filter(role='STUDENT').count(),
+            "total_lecturers": User.objects.filter(role='LECTURER', is_verified=True).count()
+        }, status=status.HTTP_200_OK)

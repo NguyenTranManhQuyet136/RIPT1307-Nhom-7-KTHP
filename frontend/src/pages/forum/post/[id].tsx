@@ -17,7 +17,8 @@ import {
   Spin,
   Empty,
   Popover,
-  List
+  List,
+  Pagination
 } from 'antd';
 import type { MenuProps } from 'antd';
 import {
@@ -78,6 +79,7 @@ interface Post {
   content: string;
   author: string;
   author_name: string;
+  author_username?: string;
   author_avatar?: string;
   author_role?: string;
   author_is_verified?: boolean;
@@ -101,6 +103,8 @@ interface CommentReply {
   content: string;
   parent: number;
   is_accepted: boolean;
+  accepted_by_author?: boolean;
+  accepted_by_lecturer?: boolean;
   score: number;
   user_vote: number;
   replies: CommentReply[];
@@ -118,6 +122,8 @@ interface CommentType {
   content: string;
   parent: number | null;
   is_accepted: boolean;
+  accepted_by_author?: boolean;
+  accepted_by_lecturer?: boolean;
   score: number;
   user_vote: number;
   replies: CommentReply[];
@@ -172,7 +178,22 @@ const ReplyItem: React.FC<{ reply: CommentReply; onVote: (id: number, val: numbe
       </div>
       <div style={{ flex: 1 }}>
         <div style={{ display: 'flex', alignItems: 'center', marginBottom: 4 }}>
-          <Text strong style={{ color: '#0074cc', fontSize: 13 }}>{reply.author_name}</Text>
+          <Text 
+            strong 
+            style={{ 
+              color: '#0074cc', 
+              fontSize: 13, 
+              maxWidth: 120, 
+              overflow: 'hidden', 
+              textOverflow: 'ellipsis', 
+              whiteSpace: 'nowrap',
+              display: 'inline-block',
+              verticalAlign: 'middle'
+            }}
+            title={reply.author_name}
+          >
+            {reply.author_name}
+          </Text>
           {getRoleBadge(reply.author_role, reply.author_is_verified)}
           <Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>
             {moment(reply.created_at).fromNow()}
@@ -189,6 +210,8 @@ const ReplyItem: React.FC<{ reply: CommentReply; onVote: (id: number, val: numbe
 interface CommentItemProps {
   comment: CommentType;
   canAccept: boolean;
+  isPostAuthor?: boolean;
+  isLecturer?: boolean;
   replyingTo: number | null;
   replyContent: string;
   submitting: boolean;
@@ -203,6 +226,8 @@ interface CommentItemProps {
 const CommentItem: React.FC<CommentItemProps> = ({
   comment,
   canAccept,
+  isPostAuthor,
+  isLecturer,
   replyingTo,
   replyContent,
   submitting,
@@ -212,54 +237,73 @@ const CommentItem: React.FC<CommentItemProps> = ({
   onCancelReply,
   onAccept,
   onVote
-}) => (
-  <div style={{ borderBottom: '1px solid #e3e6e8', padding: '20px 0' }}>
-    <div style={{ display: 'flex', gap: 16 }}>
-      <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        minWidth: 48,
-        gap: 4,
-        paddingTop: 4
-      }}>
-        <Button 
-          type="text" 
-          icon={<CaretUpOutlined style={{ fontSize: 32, color: comment.user_vote === 1 ? '#f48024' : '#babfc4' }} />} 
-          onClick={() => onVote(comment.id, 1)}
-          style={{ padding: 0, height: 'auto' }} 
-        />
-        <Text strong style={{ fontSize: 22, color: '#6a737c' }}>{comment.score}</Text>
-        <Button 
-          type="text" 
-          icon={<CaretDownOutlined style={{ fontSize: 32, color: comment.user_vote === -1 ? '#39739d' : '#babfc4' }} />} 
-          onClick={() => onVote(comment.id, -1)}
-          style={{ padding: 0, height: 'auto' }} 
-        />
-        {canAccept ? (
-          <Tooltip title={comment.is_accepted ? "Bỏ chấp nhận câu trả lời" : "Chấp nhận câu trả lời"}>
-            <Button
-              type="text"
-              icon={comment.is_accepted ? 
-                <CheckCircleFilled style={{ fontSize: 28, color: '#5eba7d' }} /> : 
-                <CheckCircleOutlined style={{ fontSize: 28, color: '#babfc4' }} />
-              }
-              onClick={() => onAccept(comment.id)}
-              style={{ padding: 0, height: 'auto', marginTop: 8 }}
-            />
-          </Tooltip>
-        ) : comment.is_accepted ? (
-          <Tooltip title="Câu trả lời đã được chấp nhận">
-            <CheckCircleFilled style={{ fontSize: 28, color: '#5eba7d', marginTop: 8 }} />
-          </Tooltip>
-        ) : null}
-      </div>
+}) => {
+  const isAcceptedByMe = isPostAuthor 
+    ? comment.accepted_by_author 
+    : isLecturer 
+    ? comment.accepted_by_lecturer 
+    : comment.is_accepted;
+
+  return (
+    <div style={{ borderBottom: '1px solid #e3e6e8', padding: '20px 0' }}>
+      <div style={{ display: 'flex', gap: 16 }}>
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          minWidth: 48,
+          gap: 4,
+          paddingTop: 4
+        }}>
+          <Button 
+            type="text" 
+            icon={<CaretUpOutlined style={{ fontSize: 32, color: comment.user_vote === 1 ? '#f48024' : '#babfc4' }} />} 
+            onClick={() => onVote(comment.id, 1)}
+            style={{ padding: 0, height: 'auto' }} 
+          />
+          <Text strong style={{ fontSize: 22, color: '#6a737c' }}>{comment.score}</Text>
+          <Button 
+            type="text" 
+            icon={<CaretDownOutlined style={{ fontSize: 32, color: comment.user_vote === -1 ? '#39739d' : '#babfc4' }} />} 
+            onClick={() => onVote(comment.id, -1)}
+            style={{ padding: 0, height: 'auto' }} 
+          />
+          {canAccept ? (
+            <Tooltip title={isAcceptedByMe ? "Bỏ chấp nhận câu trả lời" : "Chấp nhận câu trả lời"}>
+              <Button
+                type="text"
+                icon={isAcceptedByMe ? 
+                  <CheckCircleFilled style={{ fontSize: 28, color: '#5eba7d' }} /> : 
+                  <CheckCircleOutlined style={{ fontSize: 28, color: '#babfc4' }} />
+                }
+                onClick={() => onAccept(comment.id)}
+                style={{ padding: 0, height: 'auto', marginTop: 8 }}
+              />
+            </Tooltip>
+          ) : comment.is_accepted ? (
+            <Tooltip title={
+              comment.accepted_by_author && comment.accepted_by_lecturer
+                ? "Câu trả lời đã được chấp nhận bởi Tác giả và Giảng viên"
+                : comment.accepted_by_lecturer
+                ? "Câu trả lời đã được chấp nhận bởi Giảng viên"
+                : "Câu trả lời đã được chấp nhận bởi Tác giả"
+            }>
+              <CheckCircleFilled style={{ fontSize: 28, color: '#5eba7d', marginTop: 8 }} />
+            </Tooltip>
+          ) : null}
+        </div>
 
       <div style={{ flex: 1 }}>
         {comment.is_accepted && (
           <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', color: '#5eba7d' }}>
             <CheckOutlined style={{ marginRight: 8, fontSize: 16, fontWeight: 'bold' }} />
-            <Text strong style={{ color: '#5eba7d', fontSize: 14 }}>CÂU TRẢ LỜI ĐƯỢC CHẤP NHẬN</Text>
+            <Text strong style={{ color: '#5eba7d', fontSize: 13, letterSpacing: '0.5px' }}>
+              {comment.accepted_by_author && comment.accepted_by_lecturer
+                ? 'ĐƯỢC CHẤP NHẬN BỞI TÁC GIẢ, GIẢNG VIÊN'
+                : comment.accepted_by_lecturer
+                ? 'ĐƯỢC CHẤP NHẬN BỞI GIẢNG VIÊN'
+                : 'ĐƯỢC CHẤP NHẬN BỞI TÁC GIẢ'}
+            </Text>
           </div>
         )}
         <Paragraph style={{ fontSize: 15, lineHeight: 1.8, color: '#232629', marginBottom: 12, whiteSpace: 'pre-wrap' }}>
@@ -310,7 +354,21 @@ const CommentItem: React.FC<CommentItemProps> = ({
                 style={{ marginRight: 6 }}
               />
             )}
-            <Text strong style={{ color: '#0074cc' }}>{comment.author_name}</Text>
+            <Text 
+              strong 
+              style={{ 
+                color: '#0074cc', 
+                maxWidth: 120, 
+                overflow: 'hidden', 
+                textOverflow: 'ellipsis', 
+                whiteSpace: 'nowrap',
+                display: 'inline-block',
+                verticalAlign: 'middle'
+              }}
+              title={comment.author_name}
+            >
+              {comment.author_name}
+            </Text>
             {getRoleBadge(comment.author_role, comment.author_is_verified)}
             <br />
             <Text type="secondary" style={{ fontSize: 11 }}>trả lời {moment(comment.created_at).fromNow()}</Text>
@@ -344,6 +402,7 @@ const CommentItem: React.FC<CommentItemProps> = ({
     </div>
   </div>
 );
+};
 
 const PostDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -361,6 +420,230 @@ const PostDetailPage: React.FC = () => {
   const notifiedIdsRef = React.useRef<Set<number>>(new Set());
   const isFirstLoadRef = React.useRef(true);
   const [activeToast, setActiveToast] = useState<{ id: any; type: string; message: string; target_post_id?: any } | null>(null);
+  const [commentCurrentPage, setCommentCurrentPage] = useState(1);
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const editorRef = React.useRef<HTMLDivElement>(null);
+  const [isFocused, setIsFocused] = useState(false);
+  const [editorEmpty, setEditorEmpty] = useState(true);
+
+  const checkIsEditorEmpty = () => {
+    if (!editorRef.current) return true;
+    const hasTags = editorRef.current.querySelector('.forum-search-tag') !== null;
+    const text = editorRef.current.textContent || '';
+    return !hasTags && text.trim() === '';
+  };
+
+  const setEditorTagsAndText = (tags: string[], text: string) => {
+    if (!editorRef.current) return;
+    editorRef.current.innerHTML = '';
+    tags.forEach(tag => {
+      const tagEl = document.createElement('span');
+      tagEl.className = 'forum-search-tag';
+      tagEl.setAttribute('contenteditable', 'false');
+      tagEl.textContent = `#${tag}`;
+      tagEl.oncontextmenu = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const plainTextNode = document.createTextNode(`#${tag}`);
+        tagEl.parentNode?.replaceChild(plainTextNode, tagEl);
+        const newRange = document.createRange();
+        newRange.setStart(plainTextNode, plainTextNode.length);
+        newRange.setEnd(plainTextNode, plainTextNode.length);
+        const newSel = window.getSelection();
+        newSel?.removeAllRanges();
+        newSel?.addRange(newRange);
+        setEditorEmpty(checkIsEditorEmpty());
+      };
+      editorRef.current?.appendChild(tagEl);
+      editorRef.current?.appendChild(document.createTextNode(' '));
+    });
+    if (text) {
+      editorRef.current.appendChild(document.createTextNode(text));
+    }
+    setEditorEmpty(tags.length === 0 && !text);
+  };
+
+  const packageLooseHashtagsInPlace = (container: HTMLDivElement | null) => {
+    if (!container) return;
+    const hashtagRegex = /(?<=^|\s)#([^\s#]+)(?=$|\s)/g;
+    const textNodes: Text[] = [];
+    const walk = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null);
+    let node: Node | null;
+    while (node = walk.nextNode()) {
+      if (node.parentNode && (node.parentNode as HTMLElement).classList.contains('forum-search-tag')) {
+        continue;
+      }
+      textNodes.push(node as Text);
+    }
+    textNodes.forEach(textNode => {
+      const text = textNode.nodeValue || '';
+      const matches = [...text.matchAll(hashtagRegex)];
+      if (matches.length === 0) return;
+      const parent = textNode.parentNode;
+      if (!parent) return;
+      let lastIdx = 0;
+      const fragment = document.createDocumentFragment();
+      matches.forEach(match => {
+        const matchIdx = match.index || 0;
+        if (matchIdx > lastIdx) {
+          fragment.appendChild(document.createTextNode(text.substring(lastIdx, matchIdx)));
+        }
+        const tagText = match[1];
+        const tagEl = document.createElement('span');
+        tagEl.className = 'forum-search-tag';
+        tagEl.setAttribute('contenteditable', 'false');
+        tagEl.textContent = `#${tagText}`;
+        tagEl.oncontextmenu = (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const plainTextNode = document.createTextNode(`#${tagText}`);
+          tagEl.parentNode?.replaceChild(plainTextNode, tagEl);
+          const newRange = document.createRange();
+          newRange.setStart(plainTextNode, plainTextNode.length);
+          newRange.setEnd(plainTextNode, plainTextNode.length);
+          const newSel = window.getSelection();
+          newSel?.removeAllRanges();
+          newSel?.addRange(newRange);
+          setEditorEmpty(checkIsEditorEmpty());
+        };
+        fragment.appendChild(tagEl);
+        lastIdx = matchIdx + match[0].length;
+      });
+      if (lastIdx < text.length) {
+        fragment.appendChild(document.createTextNode(text.substring(lastIdx)));
+      }
+      parent.replaceChild(fragment, textNode);
+    });
+  };
+
+  const parseContentEditableDOM = (container: HTMLDivElement | null) => {
+    if (!container) return { tags: [], keywords: '' };
+    const tags: string[] = [];
+    let textParts: string[] = [];
+    container.childNodes.forEach(node => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        textParts.push(node.nodeValue || '');
+      } else if (node.nodeType === Node.ELEMENT_NODE) {
+        const el = node as HTMLElement;
+        if (el.classList.contains('forum-search-tag')) {
+          const tagText = el.textContent || '';
+          tags.push(tagText.replace('#', '').toLowerCase());
+        } else {
+          textParts.push(el.textContent || '');
+        }
+      }
+    });
+    const keywords = textParts.join('').replace(/\s+/g, ' ').trim();
+    return { tags: Array.from(new Set(tags)), keywords };
+  };
+
+  const handleEditorInput = (e: React.FormEvent<HTMLDivElement>) => {
+    const selection = window.getSelection();
+    if (!selection || !selection.focusNode) {
+      setEditorEmpty(checkIsEditorEmpty());
+      return;
+    }
+    const node = selection.focusNode;
+    if (node.nodeType !== Node.TEXT_NODE) {
+      setEditorEmpty(checkIsEditorEmpty());
+      return;
+    }
+    const text = node.nodeValue || '';
+    const offset = selection.focusOffset;
+    const textBeforeCaret = text.substring(0, offset);
+    const hashtagMatch = textBeforeCaret.match(/(?:^|\s)#([^\s#]+)\s$/);
+    if (hashtagMatch) {
+      const fullMatch = hashtagMatch[0];
+      const tagText = hashtagMatch[1];
+      const hasLeadingSpace = fullMatch.startsWith(' ');
+      const keepText = textBeforeCaret.substring(0, textBeforeCaret.length - fullMatch.length) + (hasLeadingSpace ? ' ' : '');
+      const afterText = text.substring(offset);
+      node.nodeValue = keepText;
+      const tagEl = document.createElement('span');
+      tagEl.className = 'forum-search-tag';
+      tagEl.setAttribute('contenteditable', 'false');
+      tagEl.textContent = `#${tagText}`;
+      tagEl.oncontextmenu = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const plainTextNode = document.createTextNode(`#${tagText}`);
+        tagEl.parentNode?.replaceChild(plainTextNode, tagEl);
+        const newRange = document.createRange();
+        newRange.setStart(plainTextNode, plainTextNode.length);
+        newRange.setEnd(plainTextNode, plainTextNode.length);
+        const newSel = window.getSelection();
+        newSel?.removeAllRanges();
+        newSel?.addRange(newRange);
+        setEditorEmpty(checkIsEditorEmpty());
+      };
+      const trailingSpaceNode = document.createTextNode(' ' + afterText);
+      const parent = node.parentNode;
+      if (parent) {
+        if (node.nextSibling) {
+          parent.insertBefore(tagEl, node.nextSibling);
+          parent.insertBefore(trailingSpaceNode, tagEl.nextSibling);
+        } else {
+          parent.appendChild(tagEl);
+          parent.appendChild(trailingSpaceNode);
+        }
+        const range = document.createRange();
+        range.setStart(trailingSpaceNode, 1);
+        range.setEnd(trailingSpaceNode, 1);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
+    }
+    setEditorEmpty(checkIsEditorEmpty());
+  };
+
+  const handleEditorKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      executeSearch();
+      return;
+    }
+    if (e.key === 'Backspace') {
+      const selection = window.getSelection();
+      if (selection && selection.focusNode) {
+        const node = selection.focusNode;
+        const offset = selection.focusOffset;
+        if (node.nodeType === Node.TEXT_NODE && offset === 0) {
+          const prevSibling = node.previousSibling as HTMLElement;
+          if (prevSibling && prevSibling.classList && prevSibling.classList.contains('forum-search-tag')) {
+            e.preventDefault();
+            prevSibling.parentNode?.removeChild(prevSibling);
+            setTimeout(() => {
+              setEditorEmpty(checkIsEditorEmpty());
+            }, 0);
+            return;
+          }
+        }
+      }
+    }
+    setTimeout(() => {
+      setEditorEmpty(checkIsEditorEmpty());
+    }, 0);
+  };
+
+  const executeSearch = () => {
+    packageLooseHashtagsInPlace(editorRef.current);
+    const { tags, keywords } = parseContentEditableDOM(editorRef.current);
+    if (editorRef.current) {
+      editorRef.current.blur();
+    }
+    setEditorEmpty(checkIsEditorEmpty());
+    
+    // Save to localStorage
+    localStorage.setItem('search_query', keywords);
+    localStorage.setItem('search_tags', JSON.stringify(tags));
+
+    history.push({
+      pathname: '/forum',
+      search: `?search=${encodeURIComponent(keywords)}&tags=${encodeURIComponent(tags.join(','))}`
+    });
+  };
 
   const showSuccess = (msg: string) => {
     setActiveToast({
@@ -429,7 +712,8 @@ const PostDetailPage: React.FC = () => {
       type: item.notification_type,
       message: item.message,
       target_post_id: item.target_post_id,
-      actor_name: item.actor_name
+      actor_name: item.actor_name,
+      actor_avatar: item.actor_avatar
     });
   };
 
@@ -541,11 +825,21 @@ const PostDetailPage: React.FC = () => {
     }
     const loadData = async () => {
       setLoading(true);
+      setCommentCurrentPage(1);
       await fetchPost();
       await fetchComments();
       setLoading(false);
     };
     loadData();
+
+    // Đồng bộ ô tìm kiếm từ localStorage
+    const savedSearch = localStorage.getItem('search_query') || '';
+    const savedTags = JSON.parse(localStorage.getItem('search_tags') || '[]');
+    setSearchQuery(savedSearch);
+    setSelectedTags(savedTags);
+    if (editorRef.current) {
+      setEditorTagsAndText(savedTags, savedSearch);
+    }
     return () => {
       if (interval) clearInterval(interval);
     };
@@ -566,8 +860,8 @@ const PostDetailPage: React.FC = () => {
   };
 
   const userMenuItems: MenuProps['items'] = [
-    { key: 'profile', icon: <UserOutlined />, label: 'Tài khoản' },
-    { key: 'settings', icon: <SettingOutlined />, label: 'Cài đặt' },
+    ...(user?.role === 'ADMIN' ? [{ key: 'admin', icon: <SettingOutlined />, label: 'Trang quản trị', onClick: () => history.push('/admin') }] : []),
+    { key: 'profile', icon: <UserOutlined />, label: 'Tài khoản', onClick: () => history.push('/forum/profile') },
     { type: 'divider' },
     { key: 'logout', icon: <LogoutOutlined />, label: 'Đăng xuất', onClick: handleLogout },
   ];
@@ -749,8 +1043,8 @@ const PostDetailPage: React.FC = () => {
     );
   }
 
-  const isPostAuthor = user && user.username === post.author_name;
-  const isLecturer = user && user.role === 'LECTURER';
+  const isPostAuthor = user && user.username === post.author_username;
+  const isLecturer = user && (user.role === 'LECTURER' && (user.is_verified_lecturer || user.is_verified) || user.role === 'ADMIN');
   const canAccept = isPostAuthor || isLecturer;
 
   const notificationContent = (
@@ -786,10 +1080,17 @@ const PostDetailPage: React.FC = () => {
                   }}
                   className="notification-item"
                 >
-                  <Avatar 
-                    style={{ backgroundColor: item.notification_type === 'WELCOME' ? '#f48024' : '#0074cc', flexShrink: 0 }}
-                    icon={<UserOutlined />}
-                  />
+                  {item.actor_avatar ? (
+                    <Avatar 
+                      src={item.actor_avatar.startsWith('http') ? item.actor_avatar : `${BASE_URL}${item.actor_avatar}`} 
+                      style={{ flexShrink: 0 }} 
+                    />
+                  ) : (
+                    <Avatar 
+                      style={{ backgroundColor: item.notification_type === 'WELCOME' ? '#f48024' : '#0074cc', flexShrink: 0 }}
+                      icon={<UserOutlined />}
+                    />
+                  )}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ 
                       fontSize: 13, 
@@ -889,7 +1190,7 @@ const PostDetailPage: React.FC = () => {
               color: #e06d0f !important;
               background-color: #fdf6f0 !important;
             }
-            .ant-popover, .ant-popover-content {
+            .ant-popover, .ant-popover-content, .ant-dropdown, .ant-dropdown-menu {
               transition: none !important;
               animation: none !important;
             }
@@ -897,16 +1198,100 @@ const PostDetailPage: React.FC = () => {
           <div style={{ display: 'flex', alignItems: 'center', width: '100%', maxWidth: 1100, margin: '0 auto', padding: '0 24px' }}>
             <div
               style={{ fontSize: 22, fontWeight: 800, color: '#000', cursor: 'pointer', display: 'flex', alignItems: 'center', marginRight: 24 }}
-              onClick={() => history.push('/forum')}
+              onClick={() => {
+                localStorage.removeItem('search_query');
+                localStorage.removeItem('search_tags');
+                history.push('/forum');
+              }}
             >
-              <FireOutlined style={{ color: '#f48024', marginRight: 4 }} />
+              <img src="/favicon.png" alt="EduForum Logo" style={{ height: 28, marginRight: 8, objectFit: 'contain' }} />
               <span>edu<Text strong style={{ color: '#f48024' }}>forum</Text></span>
             </div>
-            <div style={{ flex: 1, padding: '0 24px 0 0' }}>
-              <Input
-                prefix={<SearchOutlined style={{ color: '#838c95' }} />}
-                placeholder="Tìm kiếm câu hỏi..."
-                style={{ borderRadius: 3, border: '1px solid #babfc4' }}
+            <div style={{ flex: 1, padding: '0 24px 0 0', margin: '0 0 0 46px', display: 'flex', alignItems: 'center', maxWidth: 800 }}>
+              <style>{`
+                .forum-search-editor {
+                  position: relative;
+                  border: 1px solid #d9d9d9;
+                  border-radius: 3px 0 0 3px;
+                  padding: 4px 11px;
+                  height: 32px;
+                  box-sizing: border-box;
+                  white-space: nowrap;
+                  overflow-x: auto;
+                  overflow-y: hidden;
+                  outline: none;
+                  background-color: #fff;
+                  flex: 1;
+                  min-width: 0;
+                  width: 0;
+                  cursor: text;
+                  font-size: 14px;
+                  line-height: 22px;
+                  transition: all 0.3s;
+                  -ms-overflow-style: none;  /* IE and Edge */
+                  scrollbar-width: none;  /* Firefox */
+                }
+                .forum-search-editor::-webkit-scrollbar {
+                  display: none; /* Chrome, Safari and Opera */
+                }
+                .forum-search-editor:hover {
+                  border-color: #f48024;
+                }
+                .forum-search-editor:focus {
+                  border-color: #f48024;
+                  box-shadow: 0 0 0 2px rgba(244, 128, 36, 0.2);
+                }
+                .forum-search-editor.show-placeholder:before {
+                  content: attr(placeholder);
+                  color: #bfbfbf;
+                  cursor: text;
+                  pointer-events: none;
+                  position: absolute;
+                  left: 11px;
+                  top: 4px;
+                }
+                .forum-search-tag {
+                  background-color: #e1ecf4;
+                  color: #39739d;
+                  border-radius: 2px;
+                  padding: 0 6px;
+                  margin: 0 2px;
+                  display: inline-block;
+                  font-weight: 500;
+                  user-select: none;
+                }
+                .forum-search-tag:hover {
+                  background-color: #d0e3f0;
+                }
+              `}</style>
+              <div
+                ref={editorRef}
+                className={`forum-search-editor ${editorEmpty ? 'show-placeholder' : ''}`}
+                contentEditable
+                onInput={handleEditorInput}
+                onKeyDown={handleEditorKeyDown}
+                onFocus={() => setIsFocused(true)}
+                onBlur={() => setIsFocused(false)}
+                placeholder="Tìm kiếm... (Sử dụng #tag để lọc theo thẻ)"
+                style={{
+                  borderColor: isFocused ? '#f48024' : '#d9d9d9',
+                  boxShadow: isFocused ? '0 0 0 2px rgba(244, 128, 36, 0.2)' : 'none',
+                }}
+              />
+              <Button 
+                type="primary" 
+                icon={<SearchOutlined />} 
+                onClick={executeSearch}
+                style={{ 
+                  backgroundColor: '#f48024', 
+                  borderColor: '#f48024', 
+                  borderTopLeftRadius: 0, 
+                  borderBottomLeftRadius: 0,
+                  height: 32,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
               />
             </div>
             <Space size={20}>
@@ -926,7 +1311,14 @@ const PostDetailPage: React.FC = () => {
                       <Button type="text" icon={<BellOutlined style={{ fontSize: 20, color: '#525960' }} />} />
                     </Badge>
                   </Popover>
-                  <Dropdown menu={{ items: userMenuItems }} placement="bottomRight" arrow>
+                  <Dropdown 
+                    menu={{ items: userMenuItems }} 
+                    placement="bottom" 
+                    arrow 
+                    trigger={['click']}
+                    transitionName=""
+                    motion={{ motionName: '' }}
+                  >
                     {user && user.avatar ? (
                       <Avatar 
                         src={user.avatar.startsWith('http') ? user.avatar : `${BASE_URL}${user.avatar}`} 
@@ -1035,7 +1427,21 @@ const PostDetailPage: React.FC = () => {
                         style={{ marginRight: 6 }}
                       />
                     )}
-                    <Text strong style={{ color: '#0074cc' }}>{post.author_name}</Text>
+                    <Text 
+                      strong 
+                      style={{ 
+                        color: '#0074cc', 
+                        maxWidth: 120, 
+                        overflow: 'hidden', 
+                        textOverflow: 'ellipsis', 
+                        whiteSpace: 'nowrap',
+                        display: 'inline-block',
+                        verticalAlign: 'middle'
+                      }}
+                      title={post.author_name}
+                    >
+                      {post.author_name}
+                    </Text>
                     {getRoleBadge(post.author_role, post.author_is_verified)}
                     <br />
                     <div style={{ marginTop: 4 }}>
@@ -1054,22 +1460,34 @@ const PostDetailPage: React.FC = () => {
 
             <div style={{ marginLeft: 48 }}>
               {comments.length > 0 ? (
-                comments.map(comment => (
-                  <CommentItem
-                    key={comment.id}
-                    comment={comment}
-                    canAccept={!!canAccept}
-                    replyingTo={replyingTo}
-                    replyContent={replyContent}
-                    submitting={submitting}
-                    onToggleReply={handleToggleReply}
-                    onReplyContentChange={setReplyContent}
-                    onSubmitReply={handleSubmitReply}
-                    onCancelReply={handleCancelReply}
-                    onAccept={handleAcceptAnswer}
-                    onVote={handleCommentVote}
+                <>
+                  {comments.slice((commentCurrentPage - 1) * 5, commentCurrentPage * 5).map(comment => (
+                    <CommentItem
+                      key={comment.id}
+                      comment={comment}
+                      canAccept={!!canAccept}
+                      isPostAuthor={isPostAuthor}
+                      isLecturer={isLecturer}
+                      replyingTo={replyingTo}
+                      replyContent={replyContent}
+                      submitting={submitting}
+                      onToggleReply={handleToggleReply}
+                      onReplyContentChange={setReplyContent}
+                      onSubmitReply={handleSubmitReply}
+                      onCancelReply={handleCancelReply}
+                      onAccept={handleAcceptAnswer}
+                      onVote={handleCommentVote}
+                    />
+                  ))}
+                  <Pagination 
+                    current={commentCurrentPage} 
+                    onChange={setCommentCurrentPage} 
+                    pageSize={5} 
+                    total={comments.length} 
+                    showSizeChanger={false} 
+                    style={{ marginTop: 24, display: 'flex', justifyContent: 'center' }} 
                   />
-                ))
+                </>
               ) : (
                 <div style={{ padding: '40px 0', textAlign: 'center' }}>
                   <Text type="secondary" style={{ fontSize: 15 }}>Chưa có câu trả lời nào. Hãy là người đầu tiên trả lời!</Text>
@@ -1130,9 +1548,15 @@ const PostDetailPage: React.FC = () => {
               alignItems: 'center'
             }}
           >
-            {activeToast.type === 'WELCOME' ? (
+            {activeToast.actor_avatar ? (
+              <Avatar 
+                size={42} 
+                src={activeToast.actor_avatar.startsWith('http') ? activeToast.actor_avatar : `${BASE_URL}${activeToast.actor_avatar}`} 
+                style={{ flexShrink: 0 }} 
+              />
+            ) : activeToast.type === 'WELCOME' ? (
               <Avatar size={42} style={{ backgroundColor: '#f48024', flexShrink: 0 }} icon={<UserOutlined />} />
-            ) : (activeToast.type === 'REPLY_POST' || activeToast.type === 'REPLY_COMMENT') ? (
+            ) : (activeToast.type === 'REPLY_POST' || activeToast.type === 'REPLY_COMMENT' || activeToast.type === 'NEW_POST') ? (
               activeToast.actor_name ? (
                 <Avatar size={42} style={{ backgroundColor: '#0074cc', flexShrink: 0, fontWeight: 700, fontSize: 18 }}>
                   {activeToast.actor_name.charAt(0).toUpperCase()}

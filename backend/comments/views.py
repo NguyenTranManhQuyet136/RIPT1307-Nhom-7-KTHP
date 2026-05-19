@@ -45,16 +45,34 @@ class CommentViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        if comment.is_accepted:
-            comment.is_accepted = False
-            msg = 'Đã bỏ chấp nhận câu trả lời.'
-        else:
-            Comment.objects.filter(post=post, is_accepted=True).update(is_accepted=False)
-            comment.is_accepted = True
-            msg = 'Đã chấp nhận câu trả lời.'
-        
+        is_user_author = (request.user == post.author)
+        is_user_lecturer = (is_verified_lecturer or is_admin)
+
+        if is_user_author:
+            Comment.objects.filter(post=post).exclude(id=comment.id).update(accepted_by_author=False)
+            comment.accepted_by_author = not comment.accepted_by_author
+
+        if is_user_lecturer:
+            Comment.objects.filter(post=post).exclude(id=comment.id).update(accepted_by_lecturer=False)
+            comment.accepted_by_lecturer = not comment.accepted_by_lecturer
+
+        comment.is_accepted = (comment.accepted_by_author or comment.accepted_by_lecturer)
         comment.save()
-        return Response({'detail': msg, 'is_accepted': comment.is_accepted})
+
+        # Cập nhật is_accepted cho toàn bộ các comment khác của bài viết
+        for other_comment in Comment.objects.filter(post=post).exclude(id=comment.id):
+            is_acc = (other_comment.accepted_by_author or other_comment.accepted_by_lecturer)
+            if other_comment.is_accepted != is_acc:
+                other_comment.is_accepted = is_acc
+                other_comment.save(update_fields=['is_accepted'])
+
+        msg = 'Đã cập nhật trạng thái chấp nhận câu trả lời.'
+        return Response({
+            'detail': msg, 
+            'is_accepted': comment.is_accepted,
+            'accepted_by_author': comment.accepted_by_author,
+            'accepted_by_lecturer': comment.accepted_by_lecturer
+        })
 
     @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
     def vote(self, request, pk=None):

@@ -22,11 +22,13 @@ class Comment(models.Model):
         related_name='replies'
     )
     is_accepted = models.BooleanField(default=False)
+    accepted_by_author = models.BooleanField(default=False)
+    accepted_by_lecturer = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ['-is_accepted', '-created_at']
+        ordering = ['-is_accepted', '-accepted_by_author', '-accepted_by_lecturer', '-created_at']
 
     def __str__(self):
         return f"Comment by {self.author.username} on {self.post.title}"

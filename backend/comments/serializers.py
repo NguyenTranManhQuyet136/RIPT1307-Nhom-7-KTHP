@@ -3,7 +3,7 @@ from .models import Comment
 
 
 class CommentSerializer(serializers.ModelSerializer):
-    author_name = serializers.ReadOnlyField(source='author.username')
+    author_name = serializers.SerializerMethodField()
     author_role = serializers.ReadOnlyField(source='author.role')
     author_avatar = serializers.SerializerMethodField()
     author_is_verified = serializers.ReadOnlyField(source='author.is_verified')
@@ -16,10 +16,13 @@ class CommentSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'post', 'author', 'author_name', 'author_role',
             'author_avatar', 'author_is_verified',
-            'content', 'parent', 'is_accepted', 'score', 'user_vote', 
-            'replies', 'created_at'
+            'content', 'parent', 'is_accepted', 'accepted_by_author', 'accepted_by_lecturer',
+            'score', 'user_vote', 'replies', 'created_at'
         ]
-        read_only_fields = ['author', 'is_accepted']
+        read_only_fields = ['author', 'is_accepted', 'accepted_by_author', 'accepted_by_lecturer']
+
+    def get_author_name(self, obj):
+        return obj.author.full_name or obj.author.username
 
     def get_author_avatar(self, obj):
         request = self.context.get('request')

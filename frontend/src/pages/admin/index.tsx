@@ -152,7 +152,14 @@ export default function AdminDashboard() {
                   className="notification-item"
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%' }}>
-                    <Avatar style={{ backgroundColor: '#f48024', flexShrink: 0 }} icon={<UserOutlined />} />
+                    {item.actor_avatar ? (
+                      <Avatar 
+                        src={item.actor_avatar.startsWith('http') ? item.actor_avatar : `${BASE_URL}${item.actor_avatar}`} 
+                        style={{ flexShrink: 0 }} 
+                      />
+                    ) : (
+                      <Avatar style={{ backgroundColor: '#f48024', flexShrink: 0 }} icon={<UserOutlined />} />
+                    )}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 13, color: '#232629', fontWeight: item.is_read ? 400 : 500 }}>{item.message}</div>
                       <div style={{ fontSize: 11, color: '#6a737c', marginTop: 4 }}>{moment(item.created_at).fromNow()}</div>
@@ -196,6 +203,7 @@ export default function AdminDashboard() {
   return (
     <ConfigProvider theme={{ algorithm: theme.defaultAlgorithm, token: { colorPrimary: '#f48024', borderRadius: 4, fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif' } }}>
       <style>{`
+        .ant-popover, .ant-popover-content, .ant-dropdown, .ant-dropdown-menu { transition: none !important; animation: none !important; }
         .notification-item:hover { background-color: #e6f7ff !important; }
         .admin-stat-card { transition: all 0.3s ease; cursor: default; }
         .admin-stat-card:hover { transform: translateY(-4px); box-shadow: 0 8px 24px rgba(0,0,0,0.12) !important; }
@@ -210,7 +218,7 @@ export default function AdminDashboard() {
         <Header style={{ background: '#fff', borderTop: '3px solid #f48024', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', padding: 0, height: 56, display: 'flex', alignItems: 'center', position: 'fixed', top: 0, left: 0, width: '100%', zIndex: 1000 }}>
           <div style={{ display: 'flex', alignItems: 'center', width: '100%', maxWidth: 1264, margin: '0 auto', padding: '0 24px' }}>
             <div style={{ fontSize: 22, fontWeight: 800, color: '#000', cursor: 'pointer', display: 'flex', alignItems: 'center' }} onClick={() => history.push('/admin')}>
-              <FireOutlined style={{ color: '#f48024', marginRight: 4 }} />
+              <img src="/favicon.png" alt="EduForum Logo" style={{ height: 28, marginRight: 8, objectFit: 'contain' }} />
               <span>edu<Text strong style={{ color: '#f48024' }}>forum</Text></span>
               <Text style={{ fontSize: 12, color: '#f48024', marginLeft: 8, fontWeight: 600, border: '1px solid #f48024', borderRadius: 3, padding: '1px 6px' }}>ADMIN</Text>
             </div>
@@ -223,7 +231,14 @@ export default function AdminDashboard() {
                       <Button type="text" icon={<BellOutlined style={{ fontSize: 20, color: '#525960' }} />} />
                     </Badge>
                   </Popover>
-                  <Dropdown menu={{ items: userMenuItems }} placement="bottomRight" arrow>
+                  <Dropdown 
+                    menu={{ items: userMenuItems }} 
+                    placement="bottom" 
+                    arrow 
+                    trigger={['click']}
+                    transitionName=""
+                    motion={{ motionName: '' }}
+                  >
                     {user.avatar ? (
                       <Avatar src={user.avatar.startsWith('http') ? user.avatar : `${BASE_URL}${user.avatar}`} style={{ cursor: 'pointer', border: '1px solid #e3e6e8' }} />
                     ) : (
