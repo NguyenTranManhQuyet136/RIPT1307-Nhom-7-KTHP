@@ -1,55 +1,5 @@
-// Senior FE Carousel Implementation
-import React, { useState, useEffect } from 'react';
-import { 
-  Layout, 
-  Menu, 
-  Button, 
-  Input, 
-  Card, 
-  Tag, 
-  Space, 
-  Typography, 
-  Avatar, 
-  Row, 
-  Col, 
-  Modal, 
-  Form, 
-  message,
-  notification,
-  ConfigProvider, 
-  theme,
-  List,
-  Divider,
-  Empty,
-  Badge,
-  Tooltip,
-  Dropdown,
-  Select,
-  Popover,
-  Spin,
-  Pagination
-} from 'antd';
-import type { MenuProps } from 'antd';
-import { 
-  GlobalOutlined, 
-  QuestionCircleOutlined, 
-  TagsOutlined, 
-  UserOutlined, 
-  SearchOutlined, 
-  PlusOutlined,
-  EyeOutlined,
-  LogoutOutlined,
-  FireOutlined,
-  BellOutlined,
-  SettingOutlined,
-  CheckCircleFilled,
-  CloseCircleFilled,
-  ExclamationCircleFilled,
-  ClockCircleOutlined,
-  MessageOutlined,
-  LeftOutlined,
-  RightOutlined
-} from '@ant-design/icons';
+import React, { useState, useEffect, useRef } from 'react';
+import { Layout, Form, notification, ConfigProvider, theme } from 'antd';
 import { history, useLocation } from 'umi';
 import moment from 'moment';
 import 'moment/locale/vi';
@@ -58,6 +8,22 @@ import { ForumSider } from './components/shared/ForumSider';
 import { PostItem } from './components/feed/PostItem';
 import { CreatePostModal } from './components/feed/CreatePostModal';
 import { SidebarWidgets } from './components/feed/SidebarWidgets';
+
+// Import Types
+import { TagType, Post } from './types';
+
+// Import Components
+import ForumHeader from './components/ForumHeader';
+import ForumSidebar from './components/ForumSidebar';
+import RightSidebar from './components/RightSidebar';
+import CreatePostModal from './components/CreatePostModal';
+import CustomToast from './components/CustomToast';
+
+// Import Tabs
+import HomeTab from './components/tabs/HomeTab';
+import TagsTab from './components/tabs/TagsTab';
+import LecturersTab from './components/tabs/LecturersTab';
+import MyQuestionsTab from './components/tabs/MyQuestionsTab';
 
 moment.locale('vi');
 moment.updateLocale('vi', {
@@ -79,62 +45,7 @@ moment.updateLocale('vi', {
   }
 });
 
-const { Header, Content, Sider } = Layout;
-const { Title, Text, Paragraph } = Typography;
-
-interface TagType {
-  id: number;
-  name: string;
-  slug: string;
-  post_count: number;
-}
-
-interface Post {
-  id: number;
-  title: string;
-  content: string;
-  author_name: string;
-  author_username?: string;
-  author_avatar?: string;
-  author_role?: string;
-  author_is_verified?: boolean;
-  tags: TagType[];
-  comment_count: number;
-  view_count: number;
-  score: number;
-  is_edited?: boolean;
-}
-
-const getSnippet = (text: string) => {
-  if (!text) return '';
-  const cleanText = text.replace(/<[^>]*>/g, '').replace(/[#*`_]/g, '');
-  return cleanText.length > 80 ? cleanText.substring(0, 80) + '...' : cleanText;
-};
-
-const getRoleBadge = (role?: string, isVerified?: boolean) => {
-  if (role === 'LECTURER') {
-    if (isVerified) {
-      return (
-        <Tag color="processing" style={{ display: 'inline-flex', alignItems: 'center', gap: 2, margin: 0, fontSize: 10 }}>
-          <CheckCircleFilled style={{ color: '#52c41a' }} /> Giảng viên
-        </Tag>
-      );
-    } else {
-      return (
-        <Tag color="warning" style={{ margin: 0, fontSize: 10 }}>
-          Giảng viên (Chưa xác thực)
-        </Tag>
-      );
-    }
-  }
-  if (role === 'ADMIN') {
-    return <Tag color="red" style={{ margin: 0, fontSize: 10 }}>Admin</Tag>;
-  }
-  if (role === 'STUDENT') {
-    return <Tag color="cyan" style={{ margin: 0, fontSize: 10 }}>Sinh viên</Tag>;
-  }
-  return null;
-};
+const { Content } = Layout;
 
 const ForumPage: React.FC = () => {
   const location = useLocation();
@@ -149,31 +60,33 @@ const ForumPage: React.FC = () => {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [ordering, setOrdering] = useState('-created_at');
   const [unanswered, setUnanswered] = useState(false);
-  const editorRef = React.useRef<HTMLDivElement>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
   const [isFocused, setIsFocused] = useState(false);
   const [editorEmpty, setEditorEmpty] = useState(true);
   const [fullSearchText, setFullSearchText] = useState('');
   const [notifications, setNotifications] = useState<any[]>([]);
   const [unreadCount, setUnreadCount] = useState<number>(0);
   const [notificationLimit, setNotificationLimit] = useState<number>(10);
-  const notifiedIdsRef = React.useRef<Set<number>>(new Set());
-  const isFirstLoadRef = React.useRef(true);
+  const notifiedIdsRef = useRef<Set<number>>(new Set());
+  const isFirstLoadRef = useRef(true);
   const [activeTab, setActiveTab] = useState('home');
   const [lecturers, setLecturers] = useState<any[]>([]);
   const [lecturersLoading, setLecturersLoading] = useState(false);
   const [tagSearch, setTagSearch] = useState('');
   const [lecturerSearch, setLecturerSearch] = useState('');
-  const [activeToast, setActiveToast] = useState<{ id: any; type: string; message: string; target_post_id?: any } | null>(null);
+  const [activeToast, setActiveToast] = useState<{ id: any; type: string; message: string; target_post_id?: any; actor_name?: string; actor_avatar?: string } | null>(null);
 
   const [totalPostsCount, setTotalPostsCount] = useState(0);
-  const [studentStats, setStudentStats] = useState({ total: 120, online: 5 });
-  const [lecturerStats, setLecturerStats] = useState({ total: 8, online: 2 });
+  const [studentStats, setStudentStats] = useState({ total: 120, online: 0 });
+  const [lecturerStats, setLecturerStats] = useState({ total: 8, online: 0 });
 
   const [homeCurrentPage, setHomeCurrentPage] = useState(1);
   const [hotTopicsPage, setHotTopicsPage] = useState(0);
   const [tagsCurrentPage, setTagsCurrentPage] = useState(1);
   const [lecturersCurrentPage, setLecturersCurrentPage] = useState(1);
   const [myQuestionsCurrentPage, setMyQuestionsCurrentPage] = useState(1);
+
+  const BASE_URL = 'http://localhost:8002';
 
   const fetchTotalPostsCount = async () => {
     try {
@@ -187,30 +100,16 @@ const ForumPage: React.FC = () => {
   };
 
   const showSuccess = (msg: string) => {
-    setActiveToast({
-      id: Date.now(),
-      type: 'SUCCESS',
-      message: msg
-    });
+    setActiveToast({ id: Date.now(), type: 'SUCCESS', message: msg });
   };
 
   const showError = (msg: string) => {
-    setActiveToast({
-      id: Date.now(),
-      type: 'ERROR',
-      message: msg
-    });
+    setActiveToast({ id: Date.now(), type: 'ERROR', message: msg });
   };
 
   const showWarning = (msg: string) => {
-    setActiveToast({
-      id: Date.now(),
-      type: 'WARNING',
-      message: msg
-    });
+    setActiveToast({ id: Date.now(), type: 'WARNING', message: msg });
   };
-
-  const BASE_URL = 'http://localhost:8002';
 
   const fetchData = async (params: { tag?: string; search?: string; ordering?: string; unanswered?: boolean } = {}) => {
     setLoading(true);
@@ -222,7 +121,6 @@ const ForumPage: React.FC = () => {
         unanswered: unans = unanswered 
       } = params;
 
-      // Ưu tiên dùng dữ liệu truyền trực tiếp vào hàm, nếu không có mới dùng state
       const currentTags = tagsFromParam !== undefined ? (tagsFromParam ? tagsFromParam.split(',') : []) : selectedTags;
       const currentSearch = searchFromParam !== undefined ? searchFromParam : searchQuery;
 
@@ -235,7 +133,6 @@ const ForumPage: React.FC = () => {
       const url = `${BASE_URL}/api/posts/?${queryParams.toString()}`;
       const res = await fetch(url);
       const data = await res.json();
-      // Đảm bảo tương thích cả khi Backend có phân trang hoặc không
       setPosts(data.results || (Array.isArray(data) ? data : []));
     } catch (error) {
       showError('Không thể tải bài viết');
@@ -268,6 +165,101 @@ const ForumPage: React.FC = () => {
     }
   };
 
+  const triggerRealtimeToast = (item: any) => {
+    setActiveToast({
+      id: item.id,
+      type: item.notification_type,
+      message: item.message,
+      target_post_id: item.target_post_id,
+      actor_name: item.actor_name,
+      actor_avatar: item.actor_avatar
+    });
+  };
+
+  const fetchNotifications = async () => {
+    const token = localStorage.getItem('access_token');
+    if (!token) return;
+    try {
+      const res = await fetch(`${BASE_URL}/api/notifications/`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setNotifications(data);
+        const unread = data.filter((n: any) => !n.is_read).length;
+        setUnreadCount(unread);
+
+        data.forEach((item: any) => {
+          if (!item.is_read && !notifiedIdsRef.current.has(item.id)) {
+            notifiedIdsRef.current.add(item.id);
+            if (!isFirstLoadRef.current) {
+              triggerRealtimeToast(item);
+            }
+          }
+        });
+
+        if (isFirstLoadRef.current) {
+          data.forEach((item: any) => {
+            if (!item.is_read) {
+              notifiedIdsRef.current.add(item.id);
+            }
+          });
+          isFirstLoadRef.current = false;
+        }
+      }
+    } catch (e) {
+      console.error('Lỗi tải thông báo', e);
+    }
+  };
+
+  const handleReadNotification = async (notificationItem: any) => {
+    if (!notificationItem.is_read) {
+      const token = localStorage.getItem('access_token');
+      try {
+        await fetch(`${BASE_URL}/api/notifications/${notificationItem.id}/`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ is_read: true })
+        });
+        setNotifications(prev => 
+          prev.map(n => n.id === notificationItem.id ? { ...n, is_read: true } : n)
+        );
+        setUnreadCount(c => Math.max(0, c - 1));
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    
+    notification.destroy(notificationItem.id);
+
+    if (notificationItem.target_post_id) {
+      history.push(`/forum/post/${notificationItem.target_post_id}`);
+    }
+  };
+
+  const handleMarkAllAsRead = async () => {
+    const token = localStorage.getItem('access_token');
+    try {
+      const res = await fetch(`${BASE_URL}/api/notifications/mark_all_as_read/`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        notifications.forEach(n => {
+          notification.destroy(n.id);
+        });
+        setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+        setUnreadCount(0);
+        showSuccess('Đã đánh dấu tất cả thông báo là đã đọc');
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   useEffect(() => {
     const pendingToastSuccess = localStorage.getItem('trigger_toast_success');
     if (pendingToastSuccess) {
@@ -283,11 +275,12 @@ const ForumPage: React.FC = () => {
     const savedUser = localStorage.getItem('user');
     if (savedUser) {
       setUser(JSON.parse(savedUser));
+      fetchNotifications();
+      interval = setInterval(fetchNotifications, 10000);
     }
     fetchTags();
     fetchTotalPostsCount();
 
-    // Tải thông tin thống kê thực tế về học sinh + giảng viên từ cơ sở dữ liệu
     const fetchStats = async () => {
       try {
         const res = await fetch(`${BASE_URL}/api/auth/public-stats/`);
@@ -302,21 +295,10 @@ const ForumPage: React.FC = () => {
     };
     fetchStats();
 
-    const statsInterval = setInterval(() => {
-      setStudentStats(prev => {
-        const diff = Math.floor(Math.random() * 3) - 1; // -1, 0, 1
-        const newOnline = Math.max(2, Math.min(12, prev.online + diff));
-        return { ...prev, online: newOnline };
-      });
-      setLecturerStats(prev => {
-        const diff = Math.floor(Math.random() * 3) - 1; // -1, 0, 1
-        const newOnline = Math.max(1, Math.min(4, prev.online + diff));
-        return { ...prev, online: newOnline };
-      });
-    }, 8000);
+
 
     return () => {
-      clearInterval(statsInterval);
+      if (interval) clearInterval(interval);
     };
   }, []);
 
@@ -329,7 +311,9 @@ const ForumPage: React.FC = () => {
     setSelectedTags(tagsParam);
     setHomeCurrentPage(1);
     
-    // Lưu vào localStorage để các trang khác đồng bộ
+    const fullText = tagsParam.map(t => `#${t}`).join(' ') + (tagsParam.length > 0 && searchParam ? ' ' : '') + searchParam;
+    setFullSearchText(fullText);
+    
     localStorage.setItem('search_query', searchParam);
     localStorage.setItem('search_tags', JSON.stringify(tagsParam));
     
@@ -407,7 +391,7 @@ const ForumPage: React.FC = () => {
     form.setFieldsValue({
       title: post.title,
       content: post.content,
-      tags: post.tags.map(t => t.name).join(', ')
+      tags: post.tags.map((t: any) => t.name).join(', ')
     });
     setIsModalOpen(true);
   };
@@ -591,24 +575,6 @@ const ForumPage: React.FC = () => {
     };
   };
 
-  const getFullSearchText = (container: HTMLDivElement | null) => {
-    if (!container) return '';
-    let parts: string[] = [];
-    container.childNodes.forEach(node => {
-      if (node.nodeType === Node.TEXT_NODE) {
-        parts.push(node.nodeValue || '');
-      } else if (node.nodeType === Node.ELEMENT_NODE) {
-        const el = node as HTMLElement;
-        if (el.classList.contains('forum-search-tag')) {
-          parts.push((el.textContent || '').toLowerCase());
-        } else {
-          parts.push(el.textContent || '');
-        }
-      }
-    });
-    return parts.join('').replace(/\s+/g, ' ').trim();
-  };
-
   const filterByTag = (tagName: string | null) => {
     if (tagName) {
       const lowerTagName = tagName.toLowerCase();
@@ -748,8 +714,6 @@ const ForumPage: React.FC = () => {
     });
   };
 
-
-
   const handleOrderingChange = (newOrdering: string) => {
     setOrdering(newOrdering);
     setHomeCurrentPage(1);
@@ -763,15 +727,6 @@ const ForumPage: React.FC = () => {
     fetchData({ unanswered: newVal });
   };
 
-  const userMenuItems: MenuProps['items'] = [
-    ...(user?.role === 'ADMIN' ? [{ key: 'admin', icon: <SettingOutlined />, label: 'Trang quản trị', onClick: () => history.push('/admin') }] : []),
-    { key: 'profile', icon: <UserOutlined />, label: 'Tài khoản', onClick: () => history.push('/forum/profile') },
-    { type: 'divider' },
-    { key: 'logout', icon: <LogoutOutlined />, label: 'Đăng xuất', onClick: handleLogout },
-  ];
-
-
-
   return (
     <ConfigProvider 
       theme={{ 
@@ -784,588 +739,118 @@ const ForumPage: React.FC = () => {
       }}
     >
       <Layout style={{ minHeight: '100vh', background: '#fff' }}>
-        <ForumHeader user={user} />
+        <ForumHeader
+          user={user}
+          unreadCount={unreadCount}
+          notifications={notifications}
+          notificationLimit={notificationLimit}
+          setNotificationLimit={setNotificationLimit}
+          handleReadNotification={handleReadNotification}
+          handleMarkAllAsRead={handleMarkAllAsRead}
+          handleLogout={handleLogout}
+          filterByTag={filterByTag}
+          executeSearch={executeSearch}
+          editorRef={editorRef}
+          editorEmpty={editorEmpty}
+          setEditorEmpty={setEditorEmpty}
+          isFocused={isFocused}
+          setIsFocused={setIsFocused}
+          handleEditorInput={handleEditorInput}
+          handleEditorKeyDown={handleEditorKeyDown}
+          BASE_URL={BASE_URL}
+        />
 
         <Layout style={{ marginTop: 56, maxWidth: 1264, margin: '56px auto 0', width: '100%', background: '#fff' }}>
-          <ForumSider 
-            activeTab={activeTab} 
-            onChangeTab={(key) => {
-              if (key === 'home') {
-                filterByTag(null);
-                fetchData({ tag: undefined, search: '' });
-              }
-              setActiveTab(key);
-            }} 
+          <ForumSidebar 
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            filterByTag={filterByTag}
+            fetchData={fetchData}
           />
 
           <Content style={{ padding: '24px', marginLeft: 210, minHeight: 280, background: '#fff' }}>
             {activeTab === 'home' && (
-              <>
-                {!fullSearchText && !selectedTags.length && (
-                  <div style={{
-                    background: 'linear-gradient(135deg, #1e3c72 0%, #2a5298 50%, #f48024 100%)',
-                    borderRadius: '8px',
-                    padding: '32px 40px',
-                    color: '#fff',
-                    marginBottom: '32px',
-                    boxShadow: '0 4px 15px rgba(0,0,0,0.1)',
-                    position: 'relative',
-                    overflow: 'hidden'
-                  }}>
-                    <div style={{
-                      position: 'absolute',
-                      right: '-10%',
-                      top: '-30%',
-                      width: '300px',
-                      height: '300px',
-                      borderRadius: '50%',
-                      background: 'rgba(255,255,255,0.05)',
-                      pointerEvents: 'none'
-                    }} />
-                    <div style={{
-                      position: 'absolute',
-                      left: '40%',
-                      bottom: '-20%',
-                      width: '150px',
-                      height: '150px',
-                      borderRadius: '50%',
-                      background: 'rgba(255,255,255,0.03)',
-                      pointerEvents: 'none'
-                    }} />
-                    
-                    <Title level={2} style={{ color: '#fff', margin: 0, fontWeight: 700, fontSize: '28px', textShadow: '0 2px 4px rgba(0,0,0,0.2)' }}>
-                      Chào mừng bạn đến với EduForum!
-                    </Title>
-                    <Paragraph style={{ color: 'rgba(255, 255, 255, 0.9)', fontSize: '16px', marginTop: '12px', marginBottom: '24px', maxWidth: '680px', lineHeight: '1.6' }}>
-                      EduForum là không gian trao đổi học thuật sôi nổi, nơi các bạn sinh viên thỏa sức chia sẻ thắc mắc và các Thầy/Cô cố vấn chuyên môn luôn sẵn lòng đồng hành giải đáp kiến thức.
-                    </Paragraph>
-                    <div style={{ display: 'flex', gap: '12px' }}>
-                      <Button 
-                        type="primary" 
-                        size="large" 
-                        icon={<PlusOutlined />} 
-                        onClick={() => setIsModalOpen(true)}
-                        style={{ 
-                          backgroundColor: '#f48024', 
-                          borderColor: '#f48024',
-                          fontWeight: 600,
-                          boxShadow: '0 2px 8px rgba(244, 128, 36, 0.4)'
-                        }}
-                      >
-                        Đặt câu hỏi ngay
-                      </Button>
-                      <Button 
-                        ghost 
-                        size="large" 
-                        onClick={() => {
-                          const element = document.getElementById('forum-stats-widget');
-                          if (element) element.scrollIntoView({ behavior: 'smooth' });
-                        }}
-                        style={{ 
-                          color: '#fff', 
-                          borderColor: 'rgba(255, 255, 255, 0.6)',
-                          fontWeight: 600
-                        }}
-                      >
-                        Khám phá diễn đàn
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                {!fullSearchText && !selectedTags.length && posts.length > 0 && (
-                  (() => {
-                    const sortedHotPosts = posts
-                      .filter(Boolean)
-                      .slice()
-                      .sort((a: any, b: any) => ((b.score || 0) - (a.score || 0)) || ((b.view_count || 0) - (a.view_count || 0)));
-                    return (
-                      <div style={{ marginBottom: '32px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-                          <Title level={4} style={{ margin: 0, fontWeight: 600, color: '#2c3e50' }}>
-                            Chủ đề đang thảo luận sôi nổi
-                          </Title>
-                          <Space>
-                            <Button 
-                              icon={<LeftOutlined />} 
-                              shape="circle" 
-                              size="small" 
-                              onClick={() => setHotTopicsPage(p => p === 0 ? 3 : p - 1)} 
-                              style={{ borderColor: '#e3e6e8' }}
-                            />
-                            <Button 
-                              icon={<RightOutlined />} 
-                              shape="circle" 
-                              size="small" 
-                              onClick={() => setHotTopicsPage(p => p === 3 ? 0 : p + 1)} 
-                              style={{ borderColor: '#e3e6e8' }}
-                            />
-                          </Space>
-                        </div>
-                        
-                        <div style={{ width: '100%', overflow: 'hidden', position: 'relative' }}>
-                          <div style={{
-                            display: 'flex',
-                            width: '400%',
-                            transform: `translateX(-${hotTopicsPage * 25}%)`,
-                            transition: 'transform 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94)'
-                          }}>
-                            {[0, 1, 2, 3].map(pageIdx => {
-                              const pagePosts = sortedHotPosts.slice(pageIdx * 3, (pageIdx + 1) * 3);
-                              return (
-                                <div key={pageIdx} style={{ width: '25%', padding: '0 4px' }}>
-                                  <Row gutter={[16, 16]}>
-                                    {pagePosts.map((hotPost: any) => (
-                                      <Col xs={24} sm={8} key={hotPost.id}>
-                                        <Card
-                                          onClick={() => history.push(`/forum/post/${hotPost.id}`)}
-                                          bodyStyle={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'space-between' }}
-                                          style={{ 
-                                            height: '170px', 
-                                            borderRadius: '8px', 
-                                            border: '1px solid #e3e6e8',
-                                            cursor: 'pointer',
-                                            backgroundColor: '#fff',
-                                            display: 'flex',
-                                            flexDirection: 'column',
-                                            justifyContent: 'space-between'
-                                          }}
-                                        >
-                                          <div>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                                              <div style={{ display: 'flex', gap: '4px', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', flex: 1, marginRight: '12px' }}>
-                                                {(hotPost.tags || []).slice(0, 2).map((t: any) => (
-                                                  <Tag 
-                                                    key={t.id} 
-                                                    style={{ 
-                                                      backgroundColor: '#e1ecf4', 
-                                                      color: '#39739d', 
-                                                      border: 'none', 
-                                                      margin: 0,
-                                                      fontSize: '10px',
-                                                      padding: '0 4px',
-                                                      borderRadius: '3px'
-                                                    }}
-                                                  >
-                                                    {t.name}
-                                                  </Tag>
-                                                ))}
-                                              </div>
-                                              <Space size={12} style={{ color: '#8c8c8c', fontSize: '12px', flexShrink: 0, marginLeft: 'auto' }}>
-                                                <span><MessageOutlined /> {hotPost.comment_count || 0}</span>
-                                                <span><FireOutlined /> {hotPost.score || 0}</span>
-                                              </Space>
-                                            </div>
-                                            <Title level={5} ellipsis={{ rows: 1 }} style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#0074cc', lineHeight: '1.4' }}>
-                                              {hotPost.title}
-                                            </Title>
-                                            <Paragraph style={{ margin: '6px 0 0 0', fontSize: '12px', color: '#718096', lineHeight: '1.5', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
-                                              {getSnippet(hotPost.content)}
-                                            </Paragraph>
-                                          </div>
-                                          <div style={{ display: 'flex', alignItems: 'center', marginTop: '8px', justifyContent: 'space-between' }}>
-                                            <Text type="secondary" style={{ fontSize: '12px' }}>
-                                              bởi <Text 
-                                                strong 
-                                                style={{ 
-                                                  color: '#4a5568', 
-                                                  maxWidth: 80, 
-                                                  overflow: 'hidden', 
-                                                  textOverflow: 'ellipsis', 
-                                                  whiteSpace: 'nowrap',
-                                                  display: 'inline-block',
-                                                  verticalAlign: 'middle'
-                                                }}
-                                                title={hotPost.author_name || hotPost.author}
-                                              >
-                                                {hotPost.author_name || hotPost.author}
-                                              </Text>
-                                            </Text>
-                                            <span style={{ fontSize: '11px', color: '#a0aec0' }}>{moment(hotPost.created_at).fromNow()}</span>
-                                          </div>
-                                        </Card>
-                                      </Col>
-                                    ))}
-                                    {pagePosts.length < 3 && Array.from({ length: 3 - pagePosts.length }).map((_, i) => (
-                                      <Col xs={24} sm={8} key={`empty-${i}`}>
-                                        <div style={{ height: '170px' }} />
-                                      </Col>
-                                    ))}
-                                  </Row>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })()
-                )}
-
-                <div style={{
-                  position: 'sticky',
-                  top: 56, // header height
-                  backgroundColor: '#fff',
-                  zIndex: 99,
-                  padding: '16px 0',
-                  margin: '0 -24px 24px -24px',
-                  paddingLeft: '24px',
-                  paddingRight: '24px',
-                  borderBottom: '1px solid #eff0f1'
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                    <Title level={2} style={{ margin: 0, fontWeight: 400 }}>
-                      {fullSearchText ? (
-                        <>
-                          Kết quả cho: <span style={{ fontWeight: 600 }}>"{fullSearchText.length > 50 ? fullSearchText.substring(0, 50) + '...' : fullSearchText}"</span>
-                        </>
-                      ) : (
-                        'Tất cả câu hỏi'
-                      )}
-                    </Title>
-                    <Button 
-                      type="primary" 
-                      size="large" 
-                      icon={<PlusOutlined />} 
-                      onClick={() => setIsModalOpen(true)}
-                      style={{ boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.4)' }}
-                    >
-                      Đặt câu hỏi
-                    </Button>
-                  </div>
-                  {selectedTags.length > 0 && (
-                    <div style={{ marginTop: 8, marginBottom: 12, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                      {selectedTags.map(tag => (
-                        <Tag 
-                          key={tag} 
-                          color="#e1ecf4" 
-                          style={{ 
-                            border: 'none', 
-                            color: '#39739d', 
-                            fontWeight: 500, 
-                            padding: '2px 8px', 
-                            borderRadius: '3px',
-                            fontSize: '13px'
-                          }}
-                        >
-                          #{tag}
-                        </Tag>
-                      ))}
-                    </div>
-                  )}
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Text style={{ fontSize: 18 }}>{posts.length} câu hỏi</Text>
-                    <Space.Compact block={false}>
-                      <Button 
-                        type={ordering === '-created_at' ? 'primary' : 'default'}
-                        onClick={() => handleOrderingChange('-created_at')}
-                      >
-                        Mới nhất
-                      </Button>
-                      <Button 
-                        type={ordering === '-view_count' ? 'primary' : 'default'}
-                        onClick={() => handleOrderingChange('-view_count')}
-                      >
-                        Phổ biến
-                      </Button>
-                      <Button 
-                        type={unanswered ? 'primary' : 'default'}
-                        onClick={toggleUnanswered}
-                      >
-                        Chưa trả lời
-                      </Button>
-                    </Space.Compact>
-                  </div>
-                </div>
-
-                {loading ? (
-                  <List loading={true} />
-                ) : posts.length > 0 ? (
-                  <>
-                    {posts.slice((homeCurrentPage - 1) * 15, homeCurrentPage * 15).map(post => <PostItem key={post.id} post={post} />)}
-                    <Pagination 
-                      current={homeCurrentPage} 
-                      onChange={setHomeCurrentPage} 
-                      pageSize={15} 
-                      total={posts.length} 
-                      showSizeChanger={false} 
-                      style={{ marginTop: 24, display: 'flex', justifyContent: 'center' }} 
-                    />
-                  </>
-                ) : (
-                  <Empty description="Chưa có câu hỏi nào. Hãy là người đầu tiên đặt câu hỏi!" style={{ marginTop: 64 }} />
-                )}
-              </>
+              <HomeTab
+                posts={posts}
+                loading={loading}
+                fullSearchText={fullSearchText}
+                selectedTags={selectedTags}
+                ordering={ordering}
+                unanswered={unanswered}
+                handleOrderingChange={handleOrderingChange}
+                toggleUnanswered={toggleUnanswered}
+                homeCurrentPage={homeCurrentPage}
+                setHomeCurrentPage={setHomeCurrentPage}
+                setIsModalOpen={setIsModalOpen}
+                filterByTag={filterByTag}
+              />
             )}
-
             {activeTab === 'tags' && (
-              <div>
-                <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Title level={2} style={{ margin: 0, fontWeight: 400 }}>Thẻ phổ biến</Title>
-                  <Input
-                    placeholder="Tìm kiếm thẻ..."
-                    prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />}
-                    style={{ width: 250 }}
-                    onChange={e => { setTagSearch(e.target.value); setTagsCurrentPage(1); }}
-                  />
-                </div>
-                <Paragraph style={{ color: '#525960', fontSize: 15, marginBottom: 24 }}>
-                  Thẻ là một danh mục giúp nhóm các câu hỏi có cùng chủ đề lại với nhau. Hãy click vào một thẻ để xem các câu hỏi liên quan.
-                </Paragraph>
-                {(() => {
-                  const filtered = tags.filter(t => t.name.toLowerCase().includes(tagSearch.toLowerCase()));
-                  const paginated = filtered.slice((tagsCurrentPage - 1) * 20, tagsCurrentPage * 20);
-                  return (
-                    <>
-                      <Row gutter={[16, 16]}>
-                        {paginated.map(t => (
-                          <Col span={8} key={t.id}>
-                            <Card
-                              style={{ borderColor: '#e3e6e8', borderRadius: 6, cursor: 'pointer' }}
-                              bodyStyle={{ padding: '16px' }}
-                              onClick={() => {
-                                filterByTag(t.slug);
-                                setActiveTab('home');
-                              }}
-                            >
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <Tag color="#e1ecf4" style={{ border: 'none', color: '#39739d', fontWeight: 600, fontSize: 14, padding: '2px 8px', margin: 0 }}>
-                                  {t.name}
-                                </Tag>
-                                <Text type="secondary" style={{ fontSize: 13 }}>
-                                  {t.post_count} bài viết
-                                </Text>
-                              </div>
-                            </Card>
-                          </Col>
-                        ))}
-                        {filtered.length === 0 && (
-                          <Col span={24}>
-                            <Empty description="Không tìm thấy thẻ nào khớp với từ khóa tìm kiếm" />
-                          </Col>
-                        )}
-                      </Row>
-                      {filtered.length > 0 && (
-                        <Pagination
-                          current={tagsCurrentPage}
-                          onChange={setTagsCurrentPage}
-                          pageSize={20}
-                          total={filtered.length}
-                          showSizeChanger={false}
-                          style={{ marginTop: 24, display: 'flex', justifyContent: 'center' }}
-                        />
-                      )}
-                    </>
-                  );
-                })()}
-              </div>
+              <TagsTab
+                tags={tags}
+                tagSearch={tagSearch}
+                setTagSearch={setTagSearch}
+                tagsCurrentPage={tagsCurrentPage}
+                setTagsCurrentPage={setTagsCurrentPage}
+                filterByTag={filterByTag}
+                setActiveTab={setActiveTab}
+              />
             )}
-
             {activeTab === 'lecturers' && (
-              <div>
-                <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Title level={2} style={{ margin: 0, fontWeight: 400 }}>Đội ngũ Giảng viên</Title>
-                  <Input
-                    placeholder="Tìm kiếm giảng viên, chuyên ngành..."
-                    prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />}
-                    style={{ width: 280 }}
-                    onChange={e => { setLecturerSearch(e.target.value); setLecturersCurrentPage(1); }}
-                  />
-                </div>
-                <Paragraph style={{ color: '#525960', fontSize: 15, marginBottom: 24 }}>
-                  Danh sách các Thầy/Cô cố vấn chuyên môn đã được EduForum xác thực tài khoản. Giảng viên luôn sẵn sàng giải đáp các câu hỏi học thuật từ sinh viên.
-                </Paragraph>
-                {lecturersLoading ? (
-                  <div style={{ textAlign: 'center', padding: '48px 0' }}>
-                    <Spin size="large" tip="Đang tải danh sách giảng viên..." />
-                  </div>
-                ) : (
-                  (() => {
-                    const filtered = lecturers.filter(l => 
-                      (l.full_name || l.username).toLowerCase().includes(lecturerSearch.toLowerCase()) ||
-                      (l.major || '').toLowerCase().includes(lecturerSearch.toLowerCase()) ||
-                      (l.university || '').toLowerCase().includes(lecturerSearch.toLowerCase())
-                    );
-                    const paginated = filtered.slice((lecturersCurrentPage - 1) * 9, lecturersCurrentPage * 9);
-                    return (
-                      <>
-                        <Row gutter={[20, 20]}>
-                          {paginated.map(l => (
-                            <Col span={8} key={l.id}>
-                              <Card
-                                hoverable
-                                style={{ 
-                                  borderColor: '#e3e6e8', 
-                                  borderRadius: 8, 
-                                  height: '100%', 
-                                  boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-                                  textAlign: 'center'
-                                }}
-                                bodyStyle={{ padding: '24px 16px' }}
-                              >
-                                <div style={{ position: 'relative', display: 'inline-block', marginBottom: 16 }}>
-                                  <Avatar 
-                                    size={80} 
-                                    src={l.avatar} 
-                                    icon={<UserOutlined />} 
-                                    style={{ border: '3px solid #f48024', boxShadow: '0 2px 8px rgba(244,128,36,0.2)' }}
-                                  />
-                                  <CheckCircleFilled 
-                                    style={{ 
-                                      color: '#52c41a', 
-                                      fontSize: 20, 
-                                      position: 'absolute', 
-                                      bottom: 2, 
-                                      right: 2, 
-                                      backgroundColor: '#fff', 
-                                      borderRadius: '50%',
-                                      padding: 1
-                                    }} 
-                                  />
-                                </div>
-                                <Title level={4} style={{ margin: '0 0 4px 0', fontSize: 16, fontWeight: 600 }}>
-                                  {l.full_name || l.username}
-                                </Title>
-                                <Tag color="processing" style={{ marginBottom: 12, borderRadius: 4 }}>
-                                  Giảng viên xác thực
-                                </Tag>
-                                <Divider style={{ margin: '12px 0' }} />
-                                <div style={{ textAlign: 'left', marginBottom: 16 }}>
-                                  <Paragraph style={{ margin: '0 0 6px 0', fontSize: 13 }}>
-                                    🏫 <Text strong>Trường:</Text> <span style={{ textTransform: 'capitalize' }}>{l.university || 'N/A'}</span>
-                                  </Paragraph>
-                                  <Paragraph style={{ margin: '0 0 6px 0', fontSize: 13 }}>
-                                    📖 <Text strong>Chuyên ngành:</Text> <span style={{ textTransform: 'capitalize' }}>{l.major || 'Chung'}</span>
-                                  </Paragraph>
-                                  <Paragraph style={{ margin: '0 0 6px 0', fontSize: 13 }}>
-                                    💬 <Text strong>Lượt hỗ trợ:</Text> <Text type="warning" strong>{l.total_answers || 0} câu trả lời</Text>
-                                  </Paragraph>
-                                </div>
-                                <Button 
-                                  type="primary" 
-                                  ghost 
-                                  style={{ width: '100%', borderRadius: 4, borderColor: '#f48024', color: '#f48024' }}
-                                  onClick={() => {
-                                    setIsModalOpen(true);
-                                    form.setFieldsValue({
-                                      title: `[Hỏi Thầy/Cô ${l.full_name || l.username}] `,
-                                    });
-                                  }}
-                                >
-                                  Đặt câu hỏi trực tiếp
-                                </Button>
-                              </Card>
-                            </Col>
-                          ))}
-                          {filtered.length === 0 && (
-                            <Col span={24}>
-                              <Empty description="Không tìm thấy giảng viên nào phù hợp" />
-                            </Col>
-                          )}
-                        </Row>
-                        {filtered.length > 0 && (
-                          <Pagination
-                            current={lecturersCurrentPage}
-                            onChange={setLecturersCurrentPage}
-                            pageSize={9}
-                            total={filtered.length}
-                            showSizeChanger={false}
-                            style={{ marginTop: 24, display: 'flex', justifyContent: 'center' }}
-                          />
-                        )}
-                      </>
-                    );
-                  })()
-                )}
-              </div>
+              <LecturersTab
+                lecturers={lecturers}
+                lecturerSearch={lecturerSearch}
+                setLecturerSearch={setLecturerSearch}
+                lecturersCurrentPage={lecturersCurrentPage}
+                setLecturersCurrentPage={setLecturersCurrentPage}
+                lecturersLoading={lecturersLoading}
+                setIsModalOpen={setIsModalOpen}
+                form={form}
+              />
             )}
-
             {activeTab === 'my-questions' && (
-              <div>
-                {!user ? (
-                  <Card style={{ textAlign: 'center', padding: '48px 24px', maxWidth: 500, margin: '64px auto', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
-                    <div style={{ fontSize: 48, color: '#f48024', marginBottom: 16 }}>
-                      <QuestionCircleOutlined />
-                    </div>
-                    <Title level={3}>Câu hỏi của bạn</Title>
-                    <Paragraph type="secondary" style={{ fontSize: 14, marginBottom: 24 }}>
-                      Vui lòng đăng nhập vào tài khoản EduForum của bạn để theo dõi, quản lý và nhận thông báo phản hồi cho các câu hỏi học tập của mình.
-                    </Paragraph>
-                    <Button type="primary" size="large" onClick={() => history.push('/auth')} style={{ padding: '0 32px' }}>
-                      Đăng nhập ngay
-                    </Button>
-                  </Card>
-                ) : (
-                  <>
-                    <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <Title level={2} style={{ margin: 0, fontWeight: 400 }}>Câu hỏi của tôi</Title>
-                      <Button 
-                        type="primary" 
-                        size="large" 
-                        icon={<PlusOutlined />} 
-                        onClick={() => setIsModalOpen(true)}
-                        style={{ boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.4)' }}
-                      >
-                        Đặt câu hỏi
-                      </Button>
-                    </div>
-                    <Divider style={{ margin: '0 0 16px 0' }} />
-                    {loading ? (
-                      <List loading={true} />
-                    ) : (
-                      (() => {
-                        const filtered = posts.filter(post => post.author_username === user.username);
-                        const paginated = filtered.slice((myQuestionsCurrentPage - 1) * 15, myQuestionsCurrentPage * 15);
-                        return (
-                          <>
-                            {paginated.map(post => <PostItem key={post.id} post={post} isMyQuestionsTab={true} />)}
-                            {filtered.length > 0 && (
-                              <Pagination
-                                current={myQuestionsCurrentPage}
-                                onChange={setMyQuestionsCurrentPage}
-                                pageSize={15}
-                                total={filtered.length}
-                                showSizeChanger={false}
-                                style={{ marginTop: 24, display: 'flex', justifyContent: 'center' }}
-                              />
-                            )}
-                            {filtered.length === 0 && (
-                              <Empty description="Bạn chưa đăng câu hỏi nào. Hãy đặt câu hỏi học thuật đầu tiên của mình nhé!" style={{ marginTop: 64 }} />
-                            )}
-                          </>
-                        );
-                      })()
-                    )}
-                  </>
-                )}
-              </div>
+              <MyQuestionsTab
+                user={user}
+                posts={posts}
+                loading={loading}
+                myQuestionsCurrentPage={myQuestionsCurrentPage}
+                setMyQuestionsCurrentPage={setMyQuestionsCurrentPage}
+                setIsModalOpen={setIsModalOpen}
+                filterByTag={filterByTag}
+                handleStartEditPost={handleStartEditPost}
+                handleDeletePost={handleDeletePost}
+              />
             )}
           </Content>
 
           {(activeTab === 'home' || activeTab === 'my-questions') && (
-            <SidebarWidgets
+            <RightSidebar
               tags={tags}
+              filterByTag={filterByTag}
+              setActiveTab={setActiveTab}
               totalPostsCount={totalPostsCount}
               studentStats={studentStats}
               lecturerStats={lecturerStats}
-              filterByTag={filterByTag}
-              setActiveTab={setActiveTab}
             />
           )}
         </Layout>
 
         <CreatePostModal
-          open={isModalOpen}
-          onCancel={() => {
-            setIsModalOpen(false);
-            setEditingPostId(null);
-            form.resetFields();
-          }}
-          onFinish={handleCreatePost}
+          isModalOpen={isModalOpen}
+          setIsModalOpen={setIsModalOpen}
           editingPostId={editingPostId}
+          setEditingPostId={setEditingPostId}
           form={form}
+          handleCreatePost={handleCreatePost}
           loading={loading}
+        />
+
+        <CustomToast
+          activeToast={activeToast}
+          setActiveToast={setActiveToast}
+          handleReadNotification={handleReadNotification}
+          user={user}
+          BASE_URL={BASE_URL}
         />
       </Layout>
     </ConfigProvider>

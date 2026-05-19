@@ -659,7 +659,7 @@ const PostDetailPage: React.FC = () => {
   }
 
   const isPostAuthor = user && user.username === post.author_username;
-  const isLecturer = user && (user.role === 'LECTURER' && (user.is_verified_lecturer || user.is_verified) || user.role === 'ADMIN');
+  const isLecturer = user && user.role === 'LECTURER' && (user.is_verified_lecturer || user.is_verified);
   const canAccept = isPostAuthor || isLecturer;
 
   return (
@@ -684,7 +684,7 @@ const PostDetailPage: React.FC = () => {
               onClick={() => history.push('/forum')}
               style={{ color: '#6a737c', marginBottom: 16, paddingLeft: 0 }}
             >
-              Quay lại danh sách câu hỏi
+              Quay lại trang chủ
             </Button>
 
             <div style={{ borderBottom: '1px solid #e3e6e8', paddingBottom: 16, marginBottom: 16 }}>
