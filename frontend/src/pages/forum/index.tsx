@@ -44,7 +44,8 @@ import {
   CheckCircleFilled,
   CloseCircleFilled,
   ExclamationCircleFilled,
-  ClockCircleOutlined
+  ClockCircleOutlined,
+  MessageOutlined
 } from '@ant-design/icons';
 import { history, useLocation } from 'umi';
 import moment from 'moment';
@@ -861,7 +862,7 @@ const ForumPage: React.FC = () => {
   ];
 
   const PostItem = ({ post, isMyQuestionsTab }: { post: Post; isMyQuestionsTab?: boolean }) => (
-    <div style={{ padding: '16px 0', borderBottom: '1px solid #eff0f1' }}>
+    <div className="post-item-card" style={{ padding: '16px 12px', borderBottom: '1px solid #eff0f1', borderRadius: '6px', transition: 'all 0.3s ease' }}>
       <Row gutter={16}>
         <Col span={4} style={{ textAlign: 'right', color: '#6a737c' }}>
           <div style={{ marginBottom: 8 }}>
@@ -897,6 +898,7 @@ const ForumPage: React.FC = () => {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%' }}>
             <Title level={4} style={{ marginTop: 0, marginBottom: 4, flex: 1, marginRight: 16 }}>
               <a
+                className="post-title-link"
                 style={{ color: '#0074cc', fontSize: 17, fontWeight: 400, cursor: 'pointer' }}
                 onClick={() => history.push(`/forum/post/${post.id}`)}
               >
@@ -974,7 +976,21 @@ const ForumPage: React.FC = () => {
                     icon={<UserOutlined />} 
                   />
                 )}
-                <Text strong style={{ color: '#0074cc' }}>{post.author_name}</Text>
+                <Text 
+                  strong 
+                  style={{ 
+                    color: '#0074cc', 
+                    maxWidth: 120, 
+                    overflow: 'hidden', 
+                    textOverflow: 'ellipsis', 
+                    whiteSpace: 'nowrap',
+                    display: 'inline-block',
+                    verticalAlign: 'middle'
+                  }}
+                  title={post.author_name}
+                >
+                  {post.author_name}
+                </Text>
                 
                 {getRoleBadge(post.author_role, post.author_is_verified)}
               </div>
@@ -1196,6 +1212,39 @@ const ForumPage: React.FC = () => {
                 transition: none !important;
                 animation: none !important;
               }
+              .online-dot-pulse {
+                display: inline-block;
+                width: 6px;
+                height: 6px;
+                background-color: #52c41a;
+                border-radius: 50%;
+                margin-right: 6px;
+                box-shadow: 0 0 0 0 rgba(82, 196, 26, 0.7);
+                animation: pulse 1.6s infinite;
+                vertical-align: middle;
+              }
+              @keyframes pulse {
+                0% {
+                  transform: scale(0.95);
+                  box-shadow: 0 0 0 0 rgba(82, 196, 26, 0.7);
+                }
+                70% {
+                  transform: scale(1);
+                  box-shadow: 0 0 0 5px rgba(82, 196, 26, 0);
+                }
+                100% {
+                  transform: scale(0.95);
+                  box-shadow: 0 0 0 0 rgba(82, 196, 26, 0);
+                }
+              }
+              .post-item-card:hover {
+                background-color: #fafbfc;
+                transform: translateY(-1px);
+                box-shadow: 0 4px 12px rgba(0,0,0,0.02);
+              }
+              .post-title-link:hover {
+                text-decoration: underline !important;
+              }
             `}</style>
             <div
               ref={editorRef}
@@ -1271,7 +1320,22 @@ const ForumPage: React.FC = () => {
                           icon={<UserOutlined />} 
                         />
                       )}
-                      <span style={{ fontWeight: 500, color: '#3c4146', fontSize: 14 }}>{user?.full_name || user?.username}</span>
+                      <span 
+                        style={{ 
+                          fontWeight: 500, 
+                          color: '#3c4146', 
+                          fontSize: 14,
+                          maxWidth: 120,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          display: 'inline-block',
+                          verticalAlign: 'middle'
+                        }}
+                        title={user?.full_name || user?.username}
+                      >
+                        {user?.full_name || user?.username}
+                      </span>
                     </div>
                   </Dropdown>
                 </>
@@ -1310,8 +1374,156 @@ const ForumPage: React.FC = () => {
           <Content style={{ padding: '24px', marginLeft: 210, minHeight: 280, background: '#fff' }}>
             {activeTab === 'home' && (
               <>
-                <div style={{ marginBottom: 24 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                {!fullSearchText && !selectedTags.length && (
+                  <div style={{
+                    background: 'linear-gradient(135deg, #1e3c72 0%, #2a5298 50%, #f48024 100%)',
+                    borderRadius: '8px',
+                    padding: '32px 40px',
+                    color: '#fff',
+                    marginBottom: '32px',
+                    boxShadow: '0 4px 15px rgba(0,0,0,0.1)',
+                    position: 'relative',
+                    overflow: 'hidden'
+                  }}>
+                    <div style={{
+                      position: 'absolute',
+                      right: '-10%',
+                      top: '-30%',
+                      width: '300px',
+                      height: '300px',
+                      borderRadius: '50%',
+                      background: 'rgba(255,255,255,0.05)',
+                      pointerEvents: 'none'
+                    }} />
+                    <div style={{
+                      position: 'absolute',
+                      left: '40%',
+                      bottom: '-20%',
+                      width: '150px',
+                      height: '150px',
+                      borderRadius: '50%',
+                      background: 'rgba(255,255,255,0.03)',
+                      pointerEvents: 'none'
+                    }} />
+                    
+                    <Title level={2} style={{ color: '#fff', margin: 0, fontWeight: 700, fontSize: '28px', textShadow: '0 2px 4px rgba(0,0,0,0.2)' }}>
+                      Chào mừng bạn đến với EduForum!
+                    </Title>
+                    <Paragraph style={{ color: 'rgba(255, 255, 255, 0.9)', fontSize: '16px', marginTop: '12px', marginBottom: '24px', maxWidth: '680px', lineHeight: '1.6' }}>
+                      EduForum là không gian trao đổi học thuật sôi nổi, nơi các bạn sinh viên thỏa sức chia sẻ thắc mắc và các Thầy/Cô cố vấn chuyên môn luôn sẵn lòng đồng hành giải đáp kiến thức.
+                    </Paragraph>
+                    <div style={{ display: 'flex', gap: '12px' }}>
+                      <Button 
+                        type="primary" 
+                        size="large" 
+                        icon={<PlusOutlined />} 
+                        onClick={() => setIsModalOpen(true)}
+                        style={{ 
+                          backgroundColor: '#f48024', 
+                          borderColor: '#f48024',
+                          fontWeight: 600,
+                          boxShadow: '0 2px 8px rgba(244, 128, 36, 0.4)'
+                        }}
+                      >
+                        Đặt câu hỏi ngay
+                      </Button>
+                      <Button 
+                        ghost 
+                        size="large" 
+                        onClick={() => {
+                          const element = document.getElementById('forum-stats-widget');
+                          if (element) element.scrollIntoView({ behavior: 'smooth' });
+                        }}
+                        style={{ 
+                          color: '#fff', 
+                          borderColor: 'rgba(255, 255, 255, 0.6)',
+                          fontWeight: 600
+                        }}
+                      >
+                        Khám phá diễn đàn
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {!fullSearchText && !selectedTags.length && posts.length > 0 && (
+                  <div style={{ marginBottom: '32px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
+                      <Title level={4} style={{ margin: 0, fontWeight: 600, color: '#2c3e50' }}>
+                        Chủ đề đang thảo luận sôi nổi
+                      </Title>
+                    </div>
+                    <Row gutter={[16, 16]}>
+                      {posts
+                        .slice()
+                        .sort((a, b) => b.score - a.score || b.view_count - a.view_count)
+                        .slice(0, 3)
+                        .map((hotPost, index) => (
+                          <Col xs={24} sm={8} key={hotPost.id}>
+                            <Card
+                              hoverable
+                              onClick={() => history.push(`/forum/post/${hotPost.id}`)}
+                              bodyStyle={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'space-between' }}
+                              style={{ 
+                                height: '160px', 
+                                borderRadius: '8px', 
+                                border: '1px solid #e3e6e8',
+                                transition: 'all 0.3s ease'
+                              }}
+                            >
+                              <div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                  <Tag color={index === 0 ? "volcano" : index === 1 ? "orange" : "gold"} style={{ fontWeight: 600, borderRadius: '4px' }}>
+                                    Top {index + 1} Hot
+                                  </Tag>
+                                  <Space size={12} style={{ color: '#8c8c8c', fontSize: '12px' }}>
+                                    <span><MessageOutlined /> {hotPost.comment_count || 0}</span>
+                                    <span><FireOutlined /> {hotPost.score || 0}</span>
+                                  </Space>
+                                </div>
+                                <Title level={5} ellipsis={{ rows: 2 }} style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#2d3748', lineHeight: '1.4' }}>
+                                  {hotPost.title}
+                                </Title>
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', marginTop: '12px', justifyContent: 'space-between' }}>
+                                <Text type="secondary" style={{ fontSize: '12px' }}>
+                                  bởi <Text 
+                                    strong 
+                                    style={{ 
+                                      color: '#4a5568', 
+                                      maxWidth: 80, 
+                                      overflow: 'hidden', 
+                                      textOverflow: 'ellipsis', 
+                                      whiteSpace: 'nowrap',
+                                      display: 'inline-block',
+                                      verticalAlign: 'middle'
+                                    }}
+                                    title={hotPost.author_name || hotPost.author}
+                                  >
+                                    {hotPost.author_name || hotPost.author}
+                                  </Text>
+                                </Text>
+                                <span style={{ fontSize: '11px', color: '#a0aec0' }}>{moment(hotPost.created_at).fromNow()}</span>
+                              </div>
+                            </Card>
+                          </Col>
+                        ))}
+                    </Row>
+                  </div>
+                )}
+
+                <div style={{
+                  position: 'sticky',
+                  top: 56, // header height
+                  backgroundColor: '#fff',
+                  zIndex: 99,
+                  padding: '16px 0',
+                  margin: '0 -24px 24px -24px',
+                  paddingLeft: '24px',
+                  paddingRight: '24px',
+                  borderBottom: '1px solid #eff0f1'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                     <Title level={2} style={{ margin: 0, fontWeight: 400 }}>
                       {fullSearchText ? (
                         <>
@@ -1332,7 +1544,7 @@ const ForumPage: React.FC = () => {
                     </Button>
                   </div>
                   {selectedTags.length > 0 && (
-                    <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    <div style={{ marginTop: 8, marginBottom: 12, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                       {selectedTags.map(tag => (
                         <Tag 
                           key={tag} 
@@ -1351,33 +1563,31 @@ const ForumPage: React.FC = () => {
                       ))}
                     </div>
                   )}
-                </div>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                  <Text style={{ fontSize: 18 }}>{posts.length} câu hỏi</Text>
-                  <Space.Compact block={false}>
-                    <Button 
-                      type={ordering === '-created_at' ? 'primary' : 'default'}
-                      onClick={() => handleOrderingChange('-created_at')}
-                    >
-                      Mới nhất
-                    </Button>
-                    <Button 
-                      type={ordering === '-view_count' ? 'primary' : 'default'}
-                      onClick={() => handleOrderingChange('-view_count')}
-                    >
-                      Phổ biến
-                    </Button>
-                    <Button 
-                      type={unanswered ? 'primary' : 'default'}
-                      onClick={toggleUnanswered}
-                    >
-                      Chưa trả lời
-                    </Button>
-                  </Space.Compact>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Text style={{ fontSize: 18 }}>{posts.length} câu hỏi</Text>
+                    <Space.Compact block={false}>
+                      <Button 
+                        type={ordering === '-created_at' ? 'primary' : 'default'}
+                        onClick={() => handleOrderingChange('-created_at')}
+                      >
+                        Mới nhất
+                      </Button>
+                      <Button 
+                        type={ordering === '-view_count' ? 'primary' : 'default'}
+                        onClick={() => handleOrderingChange('-view_count')}
+                      >
+                        Phổ biến
+                      </Button>
+                      <Button 
+                        type={unanswered ? 'primary' : 'default'}
+                        onClick={toggleUnanswered}
+                      >
+                        Chưa trả lời
+                      </Button>
+                    </Space.Compact>
+                  </div>
                 </div>
-
-                <Divider style={{ margin: '0 0 0 0' }} />
 
                 {loading ? (
                   <List loading={true} />
@@ -1646,11 +1856,20 @@ const ForumPage: React.FC = () => {
           {(activeTab === 'home' || activeTab === 'my-questions') && (
             <Sider width={300} style={{ background: '#fff', padding: '24px 0 24px 24px' }}>
               <Card 
-                title={<span style={{ display: 'flex', alignItems: 'center' }}><TagsOutlined style={{ marginRight: 8 }} /> Thẻ phổ biến</span>}
+                title={<span style={{ display: 'flex', alignItems: 'center' }}><TagsOutlined style={{ marginRight: 8, color: '#f48024' }} /> Thẻ phổ biến</span>}
                 size="small"
                 bordered={true}
-                style={{ backgroundColor: '#fdf7e2', borderColor: '#f1e5bc' }}
-                headStyle={{ backgroundColor: '#fbf3d5', borderBottom: '1px solid #f1e5bc' }}
+                style={{ 
+                  backgroundColor: '#fdfaf2', 
+                  borderColor: '#f5e8c7',
+                  borderRadius: '8px',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.02)'
+                }}
+                headStyle={{ 
+                  backgroundColor: '#faf4e1', 
+                  borderBottom: '1px solid #f5e8c7',
+                  borderRadius: '8px 8px 0 0'
+                }}
               >
                 <Space wrap size={[4, 8]}>
                   {tags.map(t => (
@@ -1678,26 +1897,38 @@ const ForumPage: React.FC = () => {
               </Card>
 
               <Card 
-                title="Thống kê diễn đàn" 
+                id="forum-stats-widget"
+                title={<span style={{ display: 'flex', alignItems: 'center' }}><GlobalOutlined style={{ marginRight: 8, color: '#f48024' }} /> Thống kê diễn đàn</span>} 
                 size="small" 
-                style={{ marginTop: 16 }}
+                style={{ 
+                  marginTop: 16, 
+                  borderRadius: '8px', 
+                  border: '1px solid #e3e6e8',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.03)'
+                }}
               >
                 <List size="small">
-                  <List.Item style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <Text type="secondary">Câu hỏi:</Text> <Text strong>{totalPostsCount}</Text>
+                  <List.Item style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #f1f2f6', padding: '10px 0' }}>
+                    <Text type="secondary" style={{ fontSize: '13px' }}>Câu hỏi:</Text> <Text strong style={{ color: '#2c3e50', fontSize: '14px' }}>{totalPostsCount}</Text>
                   </List.Item>
-                  <List.Item style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <Text type="secondary">Học sinh:</Text> 
-                    <span>
-                      <Text strong>{studentStats.total}</Text> 
-                      <Text type="success" style={{ fontSize: '12px', marginLeft: 6 }}>({studentStats.online} online)</Text>
+                  <List.Item style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #f1f2f6', padding: '10px 0' }}>
+                    <Text type="secondary" style={{ fontSize: '13px' }}>Học sinh:</Text> 
+                    <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+                      <Text strong style={{ color: '#2c3e50', fontSize: '14px' }}>{studentStats.total}</Text> 
+                      <Text type="success" style={{ fontSize: '12px', marginLeft: 8, backgroundColor: '#f6ffed', border: '1px solid #b7eb8f', padding: '1px 6px', borderRadius: '4px', display: 'inline-flex', alignItems: 'center' }}>
+                        <span className="online-dot-pulse"></span>
+                        {studentStats.online} online
+                      </Text>
                     </span>
                   </List.Item>
-                  <List.Item style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <Text type="secondary">Giảng viên:</Text> 
-                    <span>
-                      <Text strong>{lecturerStats.total}</Text> 
-                      <Text type="success" style={{ fontSize: '12px', marginLeft: 6 }}>({lecturerStats.online} online)</Text>
+                  <List.Item style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', border: 'none' }}>
+                    <Text type="secondary" style={{ fontSize: '13px' }}>Giảng viên:</Text> 
+                    <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+                      <Text strong style={{ color: '#2c3e50', fontSize: '14px' }}>{lecturerStats.total}</Text> 
+                      <Text type="success" style={{ fontSize: '12px', marginLeft: 8, backgroundColor: '#f6ffed', border: '1px solid #b7eb8f', padding: '1px 6px', borderRadius: '4px', display: 'inline-flex', alignItems: 'center' }}>
+                        <span className="online-dot-pulse"></span>
+                        {lecturerStats.online} online
+                      </Text>
                     </span>
                   </List.Item>
                 </List>

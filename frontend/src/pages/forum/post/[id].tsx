@@ -178,7 +178,22 @@ const ReplyItem: React.FC<{ reply: CommentReply; onVote: (id: number, val: numbe
       </div>
       <div style={{ flex: 1 }}>
         <div style={{ display: 'flex', alignItems: 'center', marginBottom: 4 }}>
-          <Text strong style={{ color: '#0074cc', fontSize: 13 }}>{reply.author_name}</Text>
+          <Text 
+            strong 
+            style={{ 
+              color: '#0074cc', 
+              fontSize: 13, 
+              maxWidth: 120, 
+              overflow: 'hidden', 
+              textOverflow: 'ellipsis', 
+              whiteSpace: 'nowrap',
+              display: 'inline-block',
+              verticalAlign: 'middle'
+            }}
+            title={reply.author_name}
+          >
+            {reply.author_name}
+          </Text>
           {getRoleBadge(reply.author_role, reply.author_is_verified)}
           <Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>
             {moment(reply.created_at).fromNow()}
@@ -339,7 +354,21 @@ const CommentItem: React.FC<CommentItemProps> = ({
                 style={{ marginRight: 6 }}
               />
             )}
-            <Text strong style={{ color: '#0074cc' }}>{comment.author_name}</Text>
+            <Text 
+              strong 
+              style={{ 
+                color: '#0074cc', 
+                maxWidth: 120, 
+                overflow: 'hidden', 
+                textOverflow: 'ellipsis', 
+                whiteSpace: 'nowrap',
+                display: 'inline-block',
+                verticalAlign: 'middle'
+              }}
+              title={comment.author_name}
+            >
+              {comment.author_name}
+            </Text>
             {getRoleBadge(comment.author_role, comment.author_is_verified)}
             <br />
             <Text type="secondary" style={{ fontSize: 11 }}>trả lời {moment(comment.created_at).fromNow()}</Text>
@@ -1398,7 +1427,21 @@ const PostDetailPage: React.FC = () => {
                         style={{ marginRight: 6 }}
                       />
                     )}
-                    <Text strong style={{ color: '#0074cc' }}>{post.author_name}</Text>
+                    <Text 
+                      strong 
+                      style={{ 
+                        color: '#0074cc', 
+                        maxWidth: 120, 
+                        overflow: 'hidden', 
+                        textOverflow: 'ellipsis', 
+                        whiteSpace: 'nowrap',
+                        display: 'inline-block',
+                        verticalAlign: 'middle'
+                      }}
+                      title={post.author_name}
+                    >
+                      {post.author_name}
+                    </Text>
                     {getRoleBadge(post.author_role, post.author_is_verified)}
                     <br />
                     <div style={{ marginTop: 4 }}>
