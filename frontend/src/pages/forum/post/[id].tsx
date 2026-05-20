@@ -64,6 +64,10 @@ moment.updateLocale('vi', {
 });
 
 const { Header, Content } = Layout;
+
+const BASE_URL = process.env.NODE_ENV === 'production' 
+  ? 'https://eduforum-1am3.onrender.com' 
+  : 'http://localhost:8002';
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
 
@@ -329,7 +333,7 @@ const CommentItem: React.FC<CommentItemProps> = ({
             {comment.author_avatar ? (
               <Avatar 
                 size="small" 
-                src={comment.author_avatar.startsWith('http') ? comment.author_avatar : `http://localhost:8002${comment.author_avatar}`} 
+                src={comment.author_avatar.startsWith('http') ? comment.author_avatar : `${BASE_URL}${comment.author_avatar}`} 
                 style={{ marginRight: 6 }}
               />
             ) : comment.author_name ? (
@@ -669,7 +673,7 @@ const PostDetailPage: React.FC = () => {
     });
   };
 
-  const BASE_URL = 'http://localhost:8002';
+
 
   const fetchPost = async () => {
     try {
@@ -1402,7 +1406,7 @@ const PostDetailPage: React.FC = () => {
                     {post.author_avatar ? (
                       <Avatar 
                         size="small" 
-                        src={post.author_avatar.startsWith('http') ? post.author_avatar : `http://localhost:8002${post.author_avatar}`} 
+                        src={post.author_avatar.startsWith('http') ? post.author_avatar : `${BASE_URL}${post.author_avatar}`} 
                         style={{ marginRight: 6 }}
                       />
                     ) : post.author_name ? (

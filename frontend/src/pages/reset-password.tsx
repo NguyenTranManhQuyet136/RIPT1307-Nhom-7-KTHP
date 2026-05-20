@@ -17,6 +17,10 @@ import { history } from 'umi';
 const { Title, Text } = Typography;
 const { Content } = Layout;
 
+const BASE_URL = process.env.NODE_ENV === 'production' 
+  ? 'https://eduforum-1am3.onrender.com' 
+  : 'http://localhost:8002';
+
 const ResetPasswordPage: React.FC = () => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
@@ -50,7 +54,8 @@ const ResetPasswordPage: React.FC = () => {
 
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:8002/api/auth/reset-password/', {
+      const response = await fetch(`${BASE_URL}/api/auth/reset-password/`, {
+
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

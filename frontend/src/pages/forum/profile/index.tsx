@@ -310,7 +310,10 @@ export default function ProfilePage() {
   const [emailForm] = Form.useForm();
   const [passwordForm] = Form.useForm();
 
-  const BASE_URL = 'http://localhost:8002';
+  const BASE_URL = process.env.NODE_ENV === 'production' 
+    ? 'https://eduforum-1am3.onrender.com' 
+    : 'http://localhost:8002';
+
 
   const showSuccess = (msg: string) => {
     setActiveToast({

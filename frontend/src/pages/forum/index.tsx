@@ -80,7 +80,10 @@ const ForumPage: React.FC = () => {
   const [lecturersCurrentPage, setLecturersCurrentPage] = useState(1);
   const [myQuestionsCurrentPage, setMyQuestionsCurrentPage] = useState(1);
 
-  const BASE_URL = 'http://localhost:8002';
+  const BASE_URL = process.env.NODE_ENV === 'production' 
+    ? 'https://eduforum-1am3.onrender.com' 
+    : 'http://localhost:8002';
+
 
   const fetchTotalPostsCount = async () => {
     try {

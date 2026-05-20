@@ -45,6 +45,10 @@ interface PostItemProps {
   handleDeletePost?: (postId: number) => void;
 }
 
+const BASE_URL = process.env.NODE_ENV === 'production' 
+  ? 'https://eduforum-1am3.onrender.com' 
+  : 'http://localhost:8002';
+
 const PostItem: React.FC<PostItemProps> = ({ 
   post, 
   isMyQuestionsTab,
@@ -144,7 +148,7 @@ const PostItem: React.FC<PostItemProps> = ({
               {post.author_avatar ? (
                 <Avatar 
                   size="small" 
-                  src={post.author_avatar.startsWith('http') ? post.author_avatar : `http://localhost:8002${post.author_avatar}`} 
+                  src={post.author_avatar.startsWith('http') ? post.author_avatar : `${BASE_URL}${post.author_avatar}`} 
                 />
               ) : post.author_name ? (
                 <Avatar 

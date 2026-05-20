@@ -43,7 +43,10 @@ export default function AdminUsers() {
   const [createForm] = Form.useForm();
   const [editForm] = Form.useForm();
 
-  const BASE_URL = 'http://localhost:8002';
+  const BASE_URL = process.env.NODE_ENV === 'production' 
+    ? 'https://eduforum-1am3.onrender.com' 
+    : 'http://localhost:8002';
+
 
   const showSuccess = (msg: string) => setActiveToast({ id: Date.now(), type: 'SUCCESS', message: msg });
   const showError = (msg: string) => setActiveToast({ id: Date.now(), type: 'ERROR', message: msg });

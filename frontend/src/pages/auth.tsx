@@ -86,7 +86,9 @@ const AuthForm: React.FC = () => {
     else if (formType === 'register') endpoint = '/api/auth/register/';
     else endpoint = '/api/auth/forgot-password/';
 
-    const baseUrl = 'http://localhost:8002';
+    const baseUrl = process.env.NODE_ENV === 'production' 
+      ? 'https://eduforum-1am3.onrender.com' 
+      : 'http://localhost:8002';
 
     try {
       let response;
