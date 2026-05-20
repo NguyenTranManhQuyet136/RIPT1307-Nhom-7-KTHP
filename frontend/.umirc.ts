@@ -16,4 +16,5 @@ export default defineConfig({
   npmClient: 'npm',
   favicons: [ '/favicon.png' ],
   title: 'EduForum',
+  esbuildMinifyIIFE: true,
 });
